@@ -160,6 +160,62 @@ void simd_style(uint64_t a[N_THREADS*N_KEYS], uint64_t b[N_THREADS*N_KEYS], uint
     
 }
 
+void long_vector(int SIMD, uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt local[N_THREADS], uint64_t tempResult[N_THREADS*N_KEYS], uint64_t threadB[N_THREADS*N_KEYS], thread_cnt histogram[N_THREADS]){
+    
+    uint64_t cnt[N_KEYS];
+    for (int th = 0; th < N_THREADS; ++th){
+        int pos = 0;
+        for (int iterator = 0; iterator < N_THREADS; ++iterator){
+            for(int idx = 0; idx < N_KEYS; idx++){
+                if (iterator < th){
+                    if(idx == 0){
+                        threadResult[pos] = 0;
+                        pos++;
+                    }
+                    else{
+                        threadResult[pos] = local[th].cnt[idx-1];
+                        pos++;
+                    }
+                }
+                else{
+                    threadResult[pos] = local[th].cnt[idx];
+                    pos++;
+                }
+            }
+        }
+        if(th == 0){
+            for (int i = 0; i < N_THREADS*N_KEYS; i++){
+                tempResult[i] = threadResult[i];
+                threadResult[i] = 0;
+            }
+            pos = 0;
+        }
+        else{
+            if (SIMD == 1){
+                simd_style(threadResult, tempResult, threadB);
+            }
+            else{
+                old_style(threadResult, tempResult, threadB);
+            }
+
+            for (int i = 0; i < N_THREADS*N_KEYS; i++){
+                tempResult[i] = threadB[i];
+                threadResult[i] = 0;
+                threadB[i] = 0;
+            }
+            
+            pos = 0;
+        }
+    }
+    
+    for (int th = 0; th<N_THREADS; th++){
+        for (int key = 0; key<N_KEYS; key++){
+            cnt[key] = tempResult[th*N_KEYS+key];
+        }
+        copy(cnt, cnt+N_KEYS, histogram[th].cnt);
+    }
+}
+
 int main(int argc, const char * argv[]) {
     //VARIABLE INTIALIZATION
     vector<int> local;
@@ -188,10 +244,14 @@ int main(int argc, const char * argv[]) {
     // STEP 2 & 3
     // SIMD and BASIC ADDITION PER LINE
     for (int j = 0; j < 2; j++){
-        
-        //FROM LOCAL TO GLOBAL HISTOGRAM FUNCTION HERE
-        
-        //FROM GLOBAL HISTOGRAM TO SORTED INDEX HERE
+        auto t1 = high_resolution_clock::now();
+        //FROM LOCAL TO GLOBAL HISTOGRAM
+        long_vector(j, threadResult, local_generated, tempResult, threadB, global_generated);
+        //FROM GLOBAL HISTOGRAM TO SORTED INDEX
+        auto t2 = high_resolution_clock::now();
+        duration<double, milli> ms_double = t2 - t1;
+        cout<< "STEP 2     | MODE: " << j << " " <<ms_double.count() << "ms |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
+        cout << endl;
 
     }
     return 0;

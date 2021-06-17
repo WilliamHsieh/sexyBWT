@@ -132,6 +132,14 @@ void algo_with_thread_global_shared(vector<int> &seq, uint8_t k, vector<uint64_t
 //    }
 }
 
+vector<uint64_t> get_full_idx(vector<int> &seq){
+    vector<uint64_t> idx;
+    for(int i = 0; i<seq.size(); i++){
+        idx.push_back(i);
+    }
+    return idx;
+}
+
 int main(int argc, const char * argv[]) {
     
         return 0;

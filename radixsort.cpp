@@ -272,17 +272,19 @@ int main(int argc, const char * argv[]) {
     // STEP 2 & 3
     // SIMD and BASIC ADDITION PER LINE
     for (int j = 0; j < 2; j++){
-        auto t1 = high_resolution_clock::now();
         //FROM LOCAL TO GLOBAL HISTOGRAM
         long_vector(j, threadResult, local_generated, tempResult, threadB, global_generated);
+        
         //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-        auto t2 = high_resolution_clock::now();
+        sorting(seq, k, idx, global_generated, sorted_index);
+
         duration<double, milli> ms_double = t2 - t1;
         cout<< "STEP 2     | MODE: " << j << " " <<ms_double.count() << "ms |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
         cout << endl;
 
     }
     
+    // PRINT THE GLOBAL HISTOGRAM
     cout << "GLOBAL HISTOGRAM: ";
     for(int i=0; i<N_THREADS; i++){
         for(int j=0; j<N_KEYS; j++){
@@ -290,6 +292,13 @@ int main(int argc, const char * argv[]) {
         }
     }
     cout << endl;
+    
+    //PRINT SORTED INDEX
+    cout << "SORTED INDEX: ";
+    for (int i=0; i<20; i++){
+        cout << sorted_index[i] << " ";
+    }
+    cout<<endl;
     
     return 0;
 }

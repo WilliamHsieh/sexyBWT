@@ -229,6 +229,21 @@ void sorting_main(uint64_t start, uint64_t end, int tid, thread_cnt (&global_his
 
 }
 
+void sorting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt (&global_histogram)[N_THREADS], vector<uint64_t> &sorted_index){
+    uint64_t len = idx.size();
+    uint64_t n_elements = floor(len/N_THREADS);
+    uint64_t n_remaining_elements = len%N_THREADS;
+    vector<uint64_t> zero_vec(N_KEYS, 0);
+    #pragma omp parallel num_threads(N_THREADS)
+    {
+        int tid = omp_get_thread_num();
+        uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
+        uint64_t end = start + n_elements;
+        if(tid == 0) end += n_remaining_elements;
+        sorting_main(start, end, tid, global_histogram, seq, idx, sorted_index);
+    }
+}
+
 int main(int argc, const char * argv[]) {
     //VARIABLE INTIALIZATION
     vector<int> local;

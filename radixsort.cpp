@@ -216,6 +216,19 @@ void long_vector(int SIMD, uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt l
     }
 }
 
+void sorting_main(uint64_t start, uint64_t end, int tid, thread_cnt (&global_histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, vector<uint64_t> &sorted_index){
+    
+    uint64_t flag[N_KEYS];
+    for(int i=0; i<N_KEYS; i++) flag[i]=0;
+    uint64_t idx_cnt = 0;
+    for(uint64_t i = end; i > start; i--){
+        idx_cnt = seq.at(i-1)-1;
+        sorted_index.at(global_histogram[tid].cnt[idx_cnt] - flag[idx_cnt] - 1) = idx.at(i-1);
+        ++flag[idx_cnt];
+    }
+
+}
+
 int main(int argc, const char * argv[]) {
     //VARIABLE INTIALIZATION
     vector<int> local;
@@ -254,5 +267,14 @@ int main(int argc, const char * argv[]) {
         cout << endl;
 
     }
+    
+    cout << "GLOBAL HISTOGRAM: ";
+    for(int i=0; i<N_THREADS; i++){
+        for(int j=0; j<N_KEYS; j++){
+            cout << global_generated[i].cnt[j] << " ";
+        }
+    }
+    cout << endl;
+    
     return 0;
 }

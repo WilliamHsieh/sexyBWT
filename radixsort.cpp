@@ -140,6 +140,26 @@ vector<uint64_t> get_full_idx(vector<int> &seq){
     return idx;
 }
 
+//LOCAL TO GLOBAL METHODS
+
+void old_style(uint64_t a[N_THREADS*N_KEYS], uint64_t b[N_THREADS*N_KEYS], uint64_t c[N_THREADS*N_KEYS]){
+    
+    
+    for(int i = 0; i < N_THREADS*N_KEYS; i++)
+        {
+            c[i] = a[i] + b[i];
+        }
+}
+
+void simd_style(uint64_t a[N_THREADS*N_KEYS], uint64_t b[N_THREADS*N_KEYS], uint64_t c[N_THREADS*N_KEYS]){
+    int64<N_THREADS*N_KEYS> A = load(a);
+    int64<N_THREADS*N_KEYS> B = load(b);
+    int64<N_THREADS*N_KEYS> C = add(A, B);
+    
+    store(c, C);
+    
+}
+
 int main(int argc, const char * argv[]) {
     //VARIABLE INTIALIZATION
     vector<int> local;
@@ -163,5 +183,16 @@ int main(int argc, const char * argv[]) {
     cout<< "STEP 1     | " << ms_double.count() << "ms          |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
     cout << endl;
     vector<uint64_t> sorted_index(seq.size(),0);
+    
+    
+    // STEP 2 & 3
+    // SIMD and BASIC ADDITION PER LINE
+    for (int j = 0; j < 2; j++){
+        
+        //FROM LOCAL TO GLOBAL HISTOGRAM FUNCTION HERE
+        
+        //FROM GLOBAL HISTOGRAM TO SORTED INDEX HERE
+
+    }
     return 0;
 }

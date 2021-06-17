@@ -64,6 +64,21 @@ vector<int> read_fasta_file(string path) {
     return sequence;
 }
 
+void algo_non_thread(vector<int> &seq, vector<uint64_t> &idx)
+{
+    uint64_t len = idx.size();
+    uint64_t histogram[N_KEYS];
+    for(int i = 0; i<N_KEYS; i++) histogram[i] = 0;
+    for (uint64_t i=0; i<len; i++) {
+        ++histogram[seq.at(idx.at(i))-1];
+    }
+
+    // test to print histogram
+    // for(int i=0; i<4; i++){
+    //     cout<<"val-"<<i<<": "<<histogram[i]<<endl;
+    // }
+}
+
 int main(int argc, const char * argv[]) {
     
         return 0;

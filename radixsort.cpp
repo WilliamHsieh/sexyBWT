@@ -79,6 +79,13 @@ void algo_non_thread(vector<int> &seq, vector<uint64_t> &idx)
     // }
 }
 
+struct thread_cnt
+{
+    uint8_t padding0[64]; //padding with the size of >= cache line to avoid false sharing
+    uint64_t cnt[N_KEYS];
+    uint8_t padding1[64]; //padding with the size of >= cache line to avoid false sharing
+};
+
 int main(int argc, const char * argv[]) {
     
         return 0;

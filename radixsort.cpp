@@ -105,6 +105,33 @@ void dummy(uint64_t start, uint64_t end, int tid, thread_cnt (&histogram)[N_THRE
      copy(cnt, cnt+N_KEYS, histogram[tid].cnt);
 }
 
+void algo_with_thread_global_shared(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt (&histogram)[N_THREADS])
+{
+    uint64_t len = idx.size();
+    uint64_t n_elements = floor(len/N_THREADS);
+    uint64_t n_remaining_elements = len%N_THREADS;
+    vector<uint64_t> zero_vec(N_KEYS, 0);
+//    thread_cnt histogram[N_THREADS];
+    for (int i=0; i<N_THREADS; i++) for(int j=0; j<N_KEYS; j++) histogram[i].cnt[j] = 0;
+    #pragma omp parallel num_threads(N_THREADS)
+    {
+        int tid = omp_get_thread_num();
+        uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
+        uint64_t end = start + n_elements;
+        if(tid == 0) end += n_remaining_elements;
+        dummy(start, end, tid, histogram, seq, idx);
+    }
+
+    // test to print histogram
+//    for(int i=0; i<N_THREADS; i++){
+//        cout << "cnt tid-" << i << ": ";
+//        for(int j=0; j<N_KEYS; j++){
+//            cout << histogram[i].cnt[j] << "; ";
+//        }
+//        cout << endl;
+//    }
+}
+
 int main(int argc, const char * argv[]) {
     
         return 0;

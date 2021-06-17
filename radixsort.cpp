@@ -141,6 +141,27 @@ vector<uint64_t> get_full_idx(vector<int> &seq){
 }
 
 int main(int argc, const char * argv[]) {
+    //VARIABLE INTIALIZATION
+    vector<int> local;
+    uint64_t tempResult[N_THREADS*N_KEYS];
+    uint64_t threadResult[N_THREADS*N_KEYS];
+    uint64_t threadB[N_THREADS*N_KEYS];
+    thread_cnt local_generated[N_THREADS];
+    thread_cnt global_generated[N_THREADS];
     
-        return 0;
+
+    // STEP 1
+    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/drosophila.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+    uint64_t k = 256;
+    vector<uint64_t> idx = get_full_idx(seq);
+    cout << "Len seq: " << seq.size() << endl;
+    cout << "Len idx: " << idx.size() << endl;
+    auto t1 = high_resolution_clock::now();
+    algo_with_thread_global_shared(seq, k, idx, local_generated);
+    auto t2 = high_resolution_clock::now();
+    duration<double, milli> ms_double = t2 - t1;
+    cout<< "STEP 1     | " << ms_double.count() << "ms          |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
+    cout << endl;
+    vector<uint64_t> sorted_index(seq.size(),0);
+    return 0;
 }

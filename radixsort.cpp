@@ -86,6 +86,25 @@ struct thread_cnt
     uint8_t padding1[64]; //padding with the size of >= cache line to avoid false sharing
 };
 
+void dummy(uint64_t start, uint64_t end, int tid, thread_cnt (&histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx){
+//    cout << "LAST CHARACTER: " << end<<" " <<seq.at(end-1) << endl;
+    uint64_t cnt[N_KEYS];
+    for(int i=0; i<N_KEYS; i++) cnt[i]=0;
+    uint64_t temp1, temp2;
+    for (uint64_t i=start; i<end; i++) {
+         // ++histogram[tid].cnt[seq.at(idx.at(i))-1];
+        temp1 = idx.at(i);
+        temp2 = seq.at(temp1)-1;
+        ++cnt[temp2];
+    }
+     uint64_t acc = 0;
+     for(int i=0; i<N_KEYS; i++){
+         cnt[i] += acc;
+         acc = cnt[i];
+     }
+     copy(cnt, cnt+N_KEYS, histogram[tid].cnt);
+}
+
 int main(int argc, const char * argv[]) {
     
         return 0;

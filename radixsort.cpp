@@ -244,6 +244,63 @@ void sorting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt (&gl
     }
 }
 
+int * addition(uint64_t a[N_THREADS*N_KEYS]){
+    static int c[N_KEYS];
+    c[0] = 0;
+    c[1] = 0;
+    c[2] = 0;
+    c[3] = 0;
+    for (int th = 0; th < N_THREADS; th++){
+        uint32<N_KEYS> check1 = make_uint(c[0],c[1],c[2],c[3]);
+        uint32<N_KEYS> check2 = make_uint(a[N_KEYS*th+0],a[N_KEYS*th+1],a[N_KEYS*th+2],a[N_KEYS*th+3]);
+        uint32<N_KEYS> result = add(check1, check2);
+        store(c, result);
+    }
+    return c;
+}
+
+int * using_thread(uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt local[N_THREADS], uint64_t tempResult[N_THREADS*N_KEYS], uint64_t threadB[N_THREADS*N_KEYS], thread_cnt (&histogram)[N_THREADS]){
+    
+    int Num_Threads =  thread::hardware_concurrency();
+    uint64_t cnt[N_KEYS];
+    ThreadPool pool(Num_Threads);
+    pool.init();
+    static int Result[N_THREADS*N_KEYS];
+    for (int horizontal = 0; horizontal < N_THREADS; horizontal++){
+        int pos = 0;
+        for (int vertical = 0; vertical < N_THREADS; vertical++){
+            for(int idx = 0; idx < N_KEYS; idx++){
+                if (horizontal < vertical){
+                    if(idx == 0){
+                        threadResult[pos] = 0;
+                        pos++;
+                    }
+                    else{
+                        threadResult[pos] = local[vertical].cnt[idx-1];
+                        pos++;
+                    }
+                }
+                else{
+                    threadResult[pos] = local[vertical].cnt[idx];
+                    pos++;
+                }
+            }
+        }
+        
+        future<int *> future = pool.submit(addition, threadResult);
+        
+        const int *result = future.get();
+        
+        for (int i = 0; i < N_KEYS; i++){
+            cnt[i] = *(result+i);
+        }
+        copy(cnt, cnt+N_KEYS, histogram[horizontal].cnt);
+    }
+
+    pool.shutdown();
+    return Result;
+}
+
 int main(int argc, const char * argv[]) {
     //VARIABLE INTIALIZATION
     vector<int> local;

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <cassert>
 
 int main() {
 	int n_jobs = 1e9;
@@ -12,15 +13,15 @@ int main() {
 
 		// initialize
 		psais::utility::parallel_do (
-			n_jobs, n_threads, [](int L, int R, std::vector<int> &arr, int x) {
+			n_jobs, n_threads, [](int L, int R, int tid, std::vector<int> &arr) {
 			for (int i = L; i < R; i++) {
-				arr[i] = x;
+				arr[i] = 5;
 			}
-		}, std::ref(v), 10);
+		}, std::ref(v));
 
 		// process
 		psais::utility::parallel_do (
-			n_jobs, n_threads, [](int L, int R, std::vector<int> &arr, int x, int y) {
+			n_jobs, n_threads, [](int L, int R, int tid, std::vector<int> &arr, int x, int y) {
 			for (int i = L; i < R; i++) {
 				arr[i] += x * y;
 			}
@@ -28,6 +29,10 @@ int main() {
 
 		auto end = std::chrono::high_resolution_clock::now();
 		std::cout << std::setw(3) << n_threads << " threads: " << (end - beg).count() << '\n';
+
+		for (int i = 0; i < n_jobs; i++) {
+			assert(v[i] == 55);
+		}
 	};
 
 	job(24);

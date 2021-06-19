@@ -16,11 +16,13 @@ void parallel_do (
 	auto counts = n_jobs / n_threads;
 	auto remain = n_jobs % n_threads;
 
-	for (int i = 0; i < n_threads; i++, remain--) {
-		auto block_size = counts + (remain > 0);
-		auto L = block_size * i;
+	for (decltype(n_jobs) tid = 0, L = 0; tid < n_threads; tid++) {
+		auto block_size = counts + (tid < remain);
+		if (block_size == 0) break;
+
 		auto R = std::min(n_jobs, L + block_size);
-		threads.emplace_back(std::forward<Func>(func), L, R, std::forward<Args>(args)...);
+		threads.emplace_back(std::forward<Func>(func), L, R, tid, std::forward<Args>(args)...);
+		L = R;
 	}
 }
 

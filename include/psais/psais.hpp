@@ -1,6 +1,7 @@
 #pragma once
 #define L_TYPE 0
 #define S_TYPE 1
+#define NUM_THREADS 24
 
 #include <vector>
 #include <string>
@@ -8,6 +9,8 @@
 #include <limits>
 #include <numeric>
 #include <iomanip>
+
+#include "psais/utility/parallel.hpp"
 
 namespace psais {
 
@@ -107,12 +110,87 @@ void induce_sort(
 // #preprocess
 
 // ##get_type
-template<typename CharType>
+template<typename IndexType, typename CharType>
 auto get_type(const std::vector<CharType> &S) {
-	auto T = std::vector<uint8_t>(S.size(), S_TYPE);
-	for (auto i = S.size() - 2; ~i; i--) {
-		T[i] = (S[i] == S[i + 1]) ? T[i + 1] : (S[i] < S[i + 1]);
+	IndexType n = S.size();
+	std::vector<uint8_t> T(n, S_TYPE);
+	std::vector<IndexType> same_char_suffix_len(NUM_THREADS, 0);
+	std::vector<IndexType> block_size(NUM_THREADS, 0);
+	std::vector<IndexType> block_left(NUM_THREADS, 0);
+
+	psais::utility::parallel_do (
+		n, NUM_THREADS, [&](
+			IndexType L, IndexType R, int tid
+		) {
+			if (L == R)
+				return ;
+
+			if (R == n or S[R - 1] < S[R])
+				T[R - 1] = S_TYPE;
+			else
+				T[R - 1] = L_TYPE;
+
+			same_char_suffix_len[tid] = 1;
+			bool same = true;
+			for (IndexType i = R - L - 2; ~i; i--) {
+				IndexType x = L + i;
+				if (S[x] < S[x + 1])
+					T[x] = S_TYPE;
+				else if (S[x] > S[x + 1])
+					T[x] = L_TYPE;
+				else
+					T[x] = T[x + 1];
+
+				if (S[x] != S[x + 1])
+					same = false;
+
+				if (same)
+					same_char_suffix_len[tid]++;
+			}
+
+			block_size[tid] = R - L;
+			block_left[tid] = L;
+		}
+	);
+
+	std::vector<uint8_t> flip(NUM_THREADS, false);
+	for (IndexType i = NUM_THREADS - 2; ~i; i--) {
+		if (block_size[i] == 0)
+			continue;
+		
+		IndexType x1 = block_left[i + 1] - 1;
+		IndexType x2 = block_left[i + 1];
+		// ...-|----|----|-...
+		//        x1 x2
+
+		if (S[x1] != S[x2])
+			continue;
+
+		uint8_t prev_left_type = T[x2];
+		if (same_char_suffix_len[i + 1] == block_size[i + 1] and flip[i + 1])
+			prev_left_type ^= 1;
+
+		if (T[x1] != prev_left_type)
+			flip[i] = true;
 	}
+
+	psais::utility::parallel_do (
+		n, NUM_THREADS, [&](
+			IndexType L, IndexType R, int tid
+		) {
+			if (not flip[tid])
+				return ;
+
+			T[R - 1] ^= 1;
+			for (IndexType i = R - L - 2; ~i; i--) {
+				IndexType x = L + i;
+				if (S[x] != S[x + 1])
+					return ;
+				T[x] ^= 1;
+			}
+		}
+	);
+
 	return T;
 }
 
@@ -145,7 +223,7 @@ std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K)
 	constexpr auto EMPTY = std::numeric_limits<IndexType>::max();
 
 	// 1. get type && bucket array
-	auto T = get_type(S);
+	auto T = get_type<IndexType>(S);
 	auto BA = get_bucket(S, K);
 
 	// 2. induce LMS-substring
@@ -192,5 +270,6 @@ auto suffix_array(std::string_view s) {
 
 #undef L_TYPE
 #undef S_TYPE
+#undef NUM_THREADS
 
 } //psais

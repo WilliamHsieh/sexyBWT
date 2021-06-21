@@ -198,12 +198,79 @@ auto get_type(const std::vector<CharType> &S) {
 template<typename IndexType, typename CharType>
 auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 	auto BA = std::vector<IndexType>(K + 1, 0);
-	for (auto &x : S) {
-		BA[x]++;
+	IndexType n = S.size();
+
+	IndexType *local_BA = new IndexType[1ull * (K + 1) * NUM_THREADS];
+
+	psais::utility::parallel_do(
+		NUM_THREADS, NUM_THREADS, [&](
+			IndexType, IndexType, IndexType tid
+		) {
+			IndexType *ptr = local_BA + tid * (K + 1);
+			for (IndexType i = 0; i < K + 1; i++)
+				ptr[i] = 0;
+		}
+	);
+
+	psais::utility::parallel_do (
+		n, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType tid
+		) {
+			IndexType *ptr = local_BA + tid * (K + 1);
+			for (IndexType i = L; i < R; i++)
+				ptr[S[i]]++;
+		}
+	);
+
+	psais::utility::parallel_do (
+		K + 1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType tid
+		) {
+			for (IndexType i = 0; i < NUM_THREADS; i++) {
+				IndexType *ptr = local_BA + i * (K + 1);
+				for (IndexType j = L; j < R; j++)
+					BA[j] += ptr[j];
+			}
+		}
+	);
+
+	delete local_BA;
+
+	std::vector<IndexType> prefix_sum(K + 1, 0);
+	std::vector<IndexType> last(NUM_THREADS, 0);
+	psais::utility::parallel_do (
+		K + 1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType tid
+		) {
+			if (L == R)
+				return ;
+
+			prefix_sum[L] = BA[L];
+			for (IndexType i = L + 1; i < R; i++)
+				prefix_sum[i] += BA[i] + prefix_sum[i - 1];
+			last[tid] = R - 1;
+		}
+	);
+
+	for (IndexType i = 1; i < NUM_THREADS; i++) {
+		if (last[i] == 0)
+			break;
+		prefix_sum[last[i]] += prefix_sum[last[i - 1]];
 	}
-	for (size_t i = 1; i < BA.size(); i++) {
-		BA[i] += BA[i - 1];
-	}
+
+	psais::utility::parallel_do (
+		K + 1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType tid
+		) {
+			if (L == R)
+				return ;
+
+			IndexType offset = (tid == 0 ? 0 : prefix_sum[L - 1]);
+			for (IndexType i = L; i < R - 1; i++)
+				BA[i] = offset + prefix_sum[i];
+			BA[R - 1] = prefix_sum[R - 1];
+		}
+	);
 	return BA;
 }
 

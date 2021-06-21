@@ -224,7 +224,7 @@ auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 
 	psais::utility::parallel_do (
 		K + 1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
+			IndexType L, IndexType R, IndexType
 		) {
 			for (IndexType i = 0; i < NUM_THREADS; i++) {
 				IndexType *ptr = local_BA + i * (K + 1);

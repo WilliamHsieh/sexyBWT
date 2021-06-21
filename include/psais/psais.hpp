@@ -56,19 +56,77 @@ auto name_substr(
 
 // #induce_sort
 
-// ##put_lms TODO: auto BA -> const std::vector<IndexType> &BA
+// ##put_lms
 template<typename IndexType, typename CharType>
 auto put_lms(
 	const std::vector<CharType> &S,
 	const std::vector<IndexType> &LMS,
 	const std::vector<IndexType> &SA1,
-	auto BA,
+	const std::vector<IndexType> &BA,
 	std::vector<IndexType> &SA
 ) {
-	for (IndexType i = SA1.size() - 1; ~i; i--) {
-		auto idx = LMS[SA1[i]];
-		SA[--BA[S[idx]]] = idx;
-	}
+	IndexType n1 = (IndexType)SA1.size();
+	IndexType K = (IndexType)BA.size() - 1;
+	IndexType *S1 = new IndexType[n1];
+	psais::utility::parallel_do(
+		n1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType
+		) {
+			for (IndexType i = L; i < R; i++)
+				S1[i] = LMS[SA1[i]];
+		}
+	);
+
+	IndexType *local_BA = new IndexType[1ull * (K + 1) * NUM_THREADS];
+	psais::utility::parallel_do(
+		NUM_THREADS, NUM_THREADS, [&](
+			IndexType, IndexType, IndexType tid
+		) {
+			IndexType *ptr = local_BA + tid * (K + 1);
+			for (IndexType i = 0; i < K + 1; i++)
+				ptr[i] = 0;
+		}
+	);
+
+	psais::utility::parallel_do (
+		n1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType tid
+		) {
+			IndexType *ptr = local_BA + tid * (K + 1);
+			for (IndexType i = L; i < R; i++) {
+				IndexType idx = S1[i];
+				ptr[S[idx]]++;
+			}
+		}
+	);
+
+	psais::utility::parallel_do (
+		K + 1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType
+		) {
+			for (IndexType i = NUM_THREADS - 2; ~i; i--) {
+				auto *w_ptr = local_BA + (i    ) * (K + 1);
+				auto *r_ptr = local_BA + (i + 1) * (K + 1);
+				for (IndexType j = L; j < R; j++)
+					w_ptr[j] += r_ptr[j];
+			}
+		}
+	);
+
+	psais::utility::parallel_do(
+		n1, NUM_THREADS, [&](
+			IndexType L, IndexType R, IndexType tid
+		) {
+			auto *ptr = local_BA + tid * (K + 1);
+			for (IndexType i = L; i < R; i++) {
+				IndexType idx = S1[i];
+				IndexType offset = ptr[S[idx]]--;
+				SA[BA[S[idx]] - offset] = idx;
+			}
+		}
+	);
+	delete S1;
+	delete local_BA;
 }
 
 // ##induce

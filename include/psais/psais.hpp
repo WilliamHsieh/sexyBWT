@@ -1,7 +1,7 @@
 #pragma once
 #define L_TYPE 0
 #define S_TYPE 1
-#define NUM_THREADS 24
+#define NUM_THREADS 24u
 
 #include <vector>
 #include <string>
@@ -120,7 +120,7 @@ auto get_type(const std::vector<CharType> &S) {
 
 	psais::utility::parallel_do (
 		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, int tid
+			IndexType L, IndexType R, IndexType tid
 		) {
 			if (L == R)
 				return ;
@@ -176,7 +176,7 @@ auto get_type(const std::vector<CharType> &S) {
 
 	psais::utility::parallel_do (
 		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, int tid
+			IndexType L, IndexType R, IndexType tid
 		) {
 			if (not flip[tid])
 				return ;
@@ -212,12 +212,12 @@ template<typename IndexType>
 auto get_lms(const std::vector<uint8_t> &T) {
 	IndexType n = T.size();
 	std::vector<std::vector<IndexType>> stk(NUM_THREADS);
-	for (int i = 0; i < NUM_THREADS; i++)
+	for (IndexType i = 0; i < NUM_THREADS; i++)
 		stk.reserve(n / NUM_THREADS + 1);
 
 	psais::utility::parallel_do (
 		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, int tid
+			IndexType L, IndexType R, IndexType tid
 		) {
 			for (IndexType i = L; i < R; i++)
 				if (i != 0 and T[i - 1] == L_TYPE and T[i] == S_TYPE)
@@ -226,14 +226,14 @@ auto get_lms(const std::vector<uint8_t> &T) {
 	);
 
 	std::vector<IndexType> prefix_sum(NUM_THREADS + 1, 0);
-	for (int i = 0; i < NUM_THREADS; i++)
+	for (IndexType i = 0; i < NUM_THREADS; i++)
 		prefix_sum[i + 1] = prefix_sum[i] + (IndexType)stk[i].size();
 
 	std::vector<IndexType> lms(prefix_sum.back());
 
 	psais::utility::parallel_do (
 		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, int tid
+			IndexType, IndexType, IndexType tid
 		) {
 			for (IndexType i = 0; i < (IndexType)stk[tid].size(); i++)
 				lms[prefix_sum[tid] + i] = stk[tid][i];

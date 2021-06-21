@@ -345,7 +345,7 @@ auto get_lms(const std::vector<uint8_t> &T) {
 			IndexType L, IndexType R, IndexType tid
 		) {
 			for (IndexType i = L; i < R; i++)
-				if (i != 0 and T[i - 1] == L_TYPE and T[i] == S_TYPE)
+				if (is_LMS(T, i))
 					stk[tid].push_back(i);
 		}
 	);

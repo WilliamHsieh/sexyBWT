@@ -18,8 +18,10 @@ int main() {
 	}, v);
 
 	auto job = [&n_jobs, &v](int n_threads) {
+
+		auto ret = v;
 		auto beg = std::chrono::high_resolution_clock::now();
-		auto ret = psais::utility::parallel_prefix_sum(v, n_threads);
+		psais::utility::parallel_prefix_sum(ret, n_threads);
 		auto end = std::chrono::high_resolution_clock::now();
 		std::cout << std::setw(3) << n_threads << " threads: " << (end - beg).count() << '\n';
 

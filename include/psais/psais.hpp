@@ -68,30 +68,24 @@ auto put_lms(
 	IndexType n1 = (IndexType)SA1.size();
 	IndexType K = (IndexType)BA.size() - 1;
 	IndexType *S1 = new IndexType[n1];
-	psais::utility::parallel_do(
-		n1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType
-		) {
+	psais::utility::parallel_do(n1, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = L; i < R; i++)
 				S1[i] = LMS[SA1[i]];
 		}
 	);
 
 	IndexType *local_BA = new IndexType[1ull * (K + 1) * NUM_THREADS];
-	psais::utility::parallel_do(
-		NUM_THREADS, NUM_THREADS, [&](
-			IndexType, IndexType, IndexType tid
-		) {
+	psais::utility::parallel_do(NUM_THREADS, NUM_THREADS,
+		[&](IndexType, IndexType, IndexType tid) {
 			IndexType *ptr = local_BA + tid * (K + 1);
 			for (IndexType i = 0; i < K + 1; i++)
 				ptr[i] = 0;
 		}
 	);
 
-	psais::utility::parallel_do (
-		n1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
+	psais::utility::parallel_do(n1, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType tid) {
 			IndexType *ptr = local_BA + tid * (K + 1);
 			for (IndexType i = L; i < R; i++) {
 				IndexType idx = S1[i];
@@ -100,10 +94,8 @@ auto put_lms(
 		}
 	);
 
-	psais::utility::parallel_do (
-		K + 1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType
-		) {
+	psais::utility::parallel_do(K + 1, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = NUM_THREADS - 2; ~i; i--) {
 				auto *w_ptr = local_BA + (i    ) * (K + 1);
 				auto *r_ptr = local_BA + (i + 1) * (K + 1);
@@ -113,10 +105,8 @@ auto put_lms(
 		}
 	);
 
-	psais::utility::parallel_do(
-		n1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
+	psais::utility::parallel_do(n1, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType tid) {
 			auto *ptr = local_BA + tid * (K + 1);
 			for (IndexType i = L; i < R; i++) {
 				IndexType idx = S1[i];
@@ -176,10 +166,8 @@ auto get_type(const std::vector<CharType> &S) {
 	std::vector<IndexType> block_size(NUM_THREADS, 0);
 	std::vector<IndexType> block_left(NUM_THREADS, 0);
 
-	psais::utility::parallel_do (
-		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
+	psais::utility::parallel_do(n, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType tid) {
 			if (L == R)
 				return ;
 
@@ -232,10 +220,8 @@ auto get_type(const std::vector<CharType> &S) {
 			flip[i] = true;
 	}
 
-	psais::utility::parallel_do (
-		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
+	psais::utility::parallel_do(n, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType tid) {
 			if (not flip[tid])
 				return ;
 
@@ -260,30 +246,24 @@ auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 
 	IndexType *local_BA = new IndexType[1ull * (K + 1) * NUM_THREADS];
 
-	psais::utility::parallel_do(
-		NUM_THREADS, NUM_THREADS, [&](
-			IndexType, IndexType, IndexType tid
-		) {
+	psais::utility::parallel_do(NUM_THREADS, NUM_THREADS,
+		[&](IndexType, IndexType, IndexType tid) {
 			IndexType *ptr = local_BA + tid * (K + 1);
 			for (IndexType i = 0; i < K + 1; i++)
 				ptr[i] = 0;
 		}
 	);
 
-	psais::utility::parallel_do (
-		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
+	psais::utility::parallel_do(n, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType tid) {
 			IndexType *ptr = local_BA + tid * (K + 1);
 			for (IndexType i = L; i < R; i++)
 				ptr[S[i]]++;
 		}
 	);
 
-	psais::utility::parallel_do (
-		K + 1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType
-		) {
+	psais::utility::parallel_do(K + 1, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = 0; i < NUM_THREADS; i++) {
 				IndexType *ptr = local_BA + i * (K + 1);
 				for (IndexType j = L; j < R; j++)
@@ -294,42 +274,7 @@ auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 
 	delete local_BA;
 
-	std::vector<IndexType> prefix_sum(K + 1, 0);
-	std::vector<IndexType> last(NUM_THREADS, 0);
-	psais::utility::parallel_do (
-		K + 1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
-			if (L == R)
-				return ;
-
-			prefix_sum[L] = BA[L];
-			for (IndexType i = L + 1; i < R; i++)
-				prefix_sum[i] += BA[i] + prefix_sum[i - 1];
-			last[tid] = R - 1;
-		}
-	);
-
-	for (IndexType i = 1; i < NUM_THREADS; i++) {
-		if (last[i] == 0)
-			break;
-		prefix_sum[last[i]] += prefix_sum[last[i - 1]];
-	}
-
-	psais::utility::parallel_do (
-		K + 1, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
-			if (L == R)
-				return ;
-
-			IndexType offset = (tid == 0 ? 0 : prefix_sum[L - 1]);
-			for (IndexType i = L; i < R - 1; i++)
-				BA[i] = offset + prefix_sum[i];
-			BA[R - 1] = prefix_sum[R - 1];
-		}
-	);
-	return BA;
+	return psais::utility::parallel_prefix_sum(BA, NUM_THREADS);
 }
 
 // ##get_lms
@@ -340,10 +285,8 @@ auto get_lms(const std::vector<uint8_t> &T) {
 	for (IndexType i = 0; i < NUM_THREADS; i++)
 		stk.reserve(n / NUM_THREADS + 1);
 
-	psais::utility::parallel_do (
-		n, NUM_THREADS, [&](
-			IndexType L, IndexType R, IndexType tid
-		) {
+	psais::utility::parallel_do(n, NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType tid) {
 			for (IndexType i = L; i < R; i++)
 				if (is_LMS(T, i))
 					stk[tid].push_back(i);
@@ -356,10 +299,8 @@ auto get_lms(const std::vector<uint8_t> &T) {
 
 	std::vector<IndexType> lms(prefix_sum.back());
 
-	psais::utility::parallel_do (
-		n, NUM_THREADS, [&](
-			IndexType, IndexType, IndexType tid
-		) {
+	psais::utility::parallel_do(n, NUM_THREADS,
+		[&](IndexType, IndexType, IndexType tid) {
 			for (IndexType i = 0; i < (IndexType)stk[tid].size(); i++)
 				lms[prefix_sum[tid] + i] = stk[tid][i];
 		}

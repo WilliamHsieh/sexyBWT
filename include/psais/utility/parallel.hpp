@@ -72,7 +72,7 @@ void parallel_prefix_sum(
 		}
 	);
 
-	for (auto i = 1; i < n_threads; i++) {
+	for (decltype(n_threads) i = 1; i < n_threads; i++) {
 		if (block_last_pos[i] == 0)
 			break;
 		block_prefix_sum[block_last_pos[i]] += block_prefix_sum[block_last_pos[i - 1]];
@@ -91,21 +91,21 @@ void parallel_prefix_sum(
 	);
 }
 
-template <typename Vec, typename Compare, typename Project>
+template <typename Compare, typename Project>
 auto parallel_take_if(
-	const Vec &vec,
+	std::integral auto n_jobs,
 	std::integral auto n_threads,
 	Compare &&compare,
 	Project &&project
 ) {
 
-	using ProjectReturnType = std::invoke_result_t<Project, typename Vec::value_type>;
+	using ProjectReturnType = std::invoke_result_t<Project, size_t>;
 
 	std::vector<std::vector<ProjectReturnType>> stk(n_threads);
-	for (auto i = 0; i < n_threads; i++)
-		stk.reserve(vec.size() / n_threads + 1);
+	for (decltype(n_threads) i = 0; i < n_threads; i++)
+		stk.reserve(n_jobs / n_threads + 1);
 
-	psais::utility::parallel_do(vec.size(), n_threads,
+	psais::utility::parallel_do(n_jobs, n_threads,
 		[&](auto L, auto R, auto tid) {
 			for (auto i = L; i < R; i++)
 				if (compare(i))
@@ -113,14 +113,14 @@ auto parallel_take_if(
 		}
 	);
 
-	std::vector<typename Vec::size_type> offset(n_threads + 1, 0);
-	for (auto i = 0; i < n_threads; i++)
+	std::vector<size_t> offset(n_threads + 1, 0);
+	for (decltype(n_threads) i = 0; i < n_threads; i++)
 		offset[i + 1] = offset[i] + stk[i].size();
 
 	std::vector<ProjectReturnType> ret(offset.back());
-	psais::utility::parallel_do(vec.size(), n_threads,
+	psais::utility::parallel_do(n_jobs, n_threads,
 		[&](auto, auto, auto tid) {
-			for (auto i = 0; i < stk[tid].size(); i++)
+			for (size_t i = 0; i < stk[tid].size(); i++)
 				ret[offset[tid] + i] = stk[tid][i];
 		}
 	);

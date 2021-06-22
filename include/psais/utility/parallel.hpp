@@ -91,4 +91,41 @@ void parallel_prefix_sum(
 	);
 }
 
+template <typename Vec, typename Compare, typename Project>
+auto parallel_take_if(
+	const Vec &vec,
+	std::integral auto n_threads,
+	Compare &&compare,
+	Project &&project
+) {
+
+	using ProjectReturnType = std::invoke_result_t<Project, typename Vec::value_type>;
+
+	std::vector<std::vector<ProjectReturnType>> stk(n_threads);
+	for (auto i = 0; i < n_threads; i++)
+		stk.reserve(vec.size() / n_threads + 1);
+
+	psais::utility::parallel_do(vec.size(), n_threads,
+		[&](auto L, auto R, auto tid) {
+			for (auto i = L; i < R; i++)
+				if (compare(i))
+					stk[tid].push_back(project(i));
+		}
+	);
+
+	std::vector<typename Vec::size_type> offset(n_threads + 1, 0);
+	for (auto i = 0; i < n_threads; i++)
+		offset[i + 1] = offset[i] + stk[i].size();
+
+	std::vector<ProjectReturnType> ret(offset.back());
+	psais::utility::parallel_do(vec.size(), n_threads,
+		[&](auto, auto, auto tid) {
+			for (auto i = 0; i < stk[tid].size(); i++)
+				ret[offset[tid] + i] = stk[tid][i];
+		}
+	);
+
+	return ret;
+}
+
 } //namespace psais::utility

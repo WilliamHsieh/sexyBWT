@@ -201,7 +201,7 @@ auto get_type(const std::vector<CharType> &S) {
 
 	std::vector<uint8_t> flip(NUM_THREADS, false);
 	for (IndexType i = NUM_THREADS - 2; ~i; i--) {
-		if (block_size[i] == 0)
+		if (block_size[i + 1] == 0)
 			continue;
 		
 		IndexType x1 = block_left[i + 1] - 1;

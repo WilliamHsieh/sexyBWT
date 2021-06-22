@@ -274,7 +274,9 @@ auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 
 	delete local_BA;
 
-	return psais::utility::parallel_prefix_sum(BA, NUM_THREADS);
+	psais::utility::parallel_prefix_sum(BA, NUM_THREADS);
+
+	return BA;
 }
 
 // ##get_lms

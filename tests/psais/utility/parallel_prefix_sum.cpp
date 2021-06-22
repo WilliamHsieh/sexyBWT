@@ -10,8 +10,11 @@ int main() {
 	// initialize
 	psais::utility::parallel_do (
 		n_jobs, 24, [](int L, int R, int tid, std::vector<long long> &arr) {
-		for (int i = L; i < R; i++)
-			arr[i] = std::rand() % 100;
+		long long seed = tid;
+		for (int i = L; i < R; i++) {
+			seed = seed * 0xdefaced + 1;
+			arr[i] = seed;
+		}
 	}, std::ref(v));
 
 	auto job = [&n_jobs, &v](int n_threads) {

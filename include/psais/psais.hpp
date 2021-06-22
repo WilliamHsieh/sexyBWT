@@ -282,32 +282,10 @@ auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 // ##get_lms
 template<typename IndexType>
 auto get_lms(const std::vector<uint8_t> &T) {
-	IndexType n = T.size();
-	std::vector<std::vector<IndexType>> stk(NUM_THREADS);
-	for (IndexType i = 0; i < NUM_THREADS; i++)
-		stk.reserve(n / NUM_THREADS + 1);
-
-	psais::utility::parallel_do(n, NUM_THREADS,
-		[&](IndexType L, IndexType R, IndexType tid) {
-			for (IndexType i = L; i < R; i++)
-				if (is_LMS(T, i))
-					stk[tid].push_back(i);
-		}
+	return psais::utility::parallel_take_if(T, NUM_THREADS,
+		[&](IndexType i) { return is_LMS(T, i); },
+		[ ](IndexType i) { return i; }
 	);
-
-	std::vector<IndexType> prefix_sum(NUM_THREADS + 1, 0);
-	for (IndexType i = 0; i < NUM_THREADS; i++)
-		prefix_sum[i + 1] = prefix_sum[i] + (IndexType)stk[i].size();
-
-	std::vector<IndexType> lms(prefix_sum.back());
-
-	psais::utility::parallel_do(n, NUM_THREADS,
-		[&](IndexType, IndexType, IndexType tid) {
-			for (IndexType i = 0; i < (IndexType)stk[tid].size(); i++)
-				lms[prefix_sum[tid] + i] = stk[tid][i];
-		}
-	);
-	return lms;
 }
 
 // #suffix_array

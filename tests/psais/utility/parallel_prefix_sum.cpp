@@ -15,7 +15,7 @@ int main() {
 			seed = seed * 0xdefaced + 1;
 			arr[i] = seed;
 		}
-	}, std::ref(v));
+	}, v);
 
 	auto job = [&n_jobs, &v](int n_threads) {
 		auto beg = std::chrono::high_resolution_clock::now();

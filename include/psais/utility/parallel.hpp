@@ -40,7 +40,7 @@ void parallel_init (
 	Val&& value
 ) {
 	parallel_do(n_jobs, n_threads,
-		[](auto L, auto R, auto, Vec& v, auto x) {
+		[](auto L, auto R, auto, Vec& v, auto&& x) {
 			for (auto i = L; i < R; i++) {
 				v[i] = x;
 			}

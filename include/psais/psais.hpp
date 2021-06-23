@@ -2,6 +2,7 @@
 #define L_TYPE 0
 #define S_TYPE 1
 #define NUM_THREADS 24u
+#define what_is(x) std::cout << '[' << #x << "]\n" << x << std::endl;
 
 #include <vector>
 #include <string>
@@ -9,10 +10,23 @@
 #include <limits>
 #include <numeric>
 #include <iomanip>
+#include <future>
+#include <omp.h>
+
+#include <boost/core/noinit_adaptor.hpp>
 
 #include "psais/utility/parallel.hpp"
+#include "psais/utility/thread_pool.hpp"
 
 namespace psais {
+
+	constexpr auto BLOCK_SIZE = 1u << 20;
+
+	template <typename T>
+	using NoInitVector = std::vector<T, boost::noinit_adaptor<std::allocator<T>>>;
+
+	template <typename T>
+	constexpr auto EMPTY = std::numeric_limits<T>::max();
 
 // #is_LMS
 inline bool is_LMS(auto &v, auto i) {
@@ -129,40 +143,219 @@ auto put_lms(
 	delete local_BA;
 }
 
-// ##induce
+// ##prepare
+template<typename IndexType, typename CharType>
+void prepare(
+	const std::vector<CharType> &S,
+	const std::vector<IndexType> &SA,
+	const std::vector<uint8_t> &T,
+	const size_t L,
+	NoInitVector<std::pair<CharType, uint8_t>> &RB
+) {
+	if (L >= SA.size()) return;
+	decltype(L) R = std::min(SA.size(), L + BLOCK_SIZE);
+	if (L >= R) return;
+
+	#pragma omp parallel for num_threads(NUM_THREADS / 2)
+	for (auto i = L; i < R; i++) {
+		auto induced_idx = SA[i] - 1;
+
+		if (SA[i] == EMPTY<IndexType> or SA[i] == 0) {
+			RB[i - L] = {EMPTY<CharType>, 0};
+		} else {
+			RB[i - L] = {S[induced_idx], T[induced_idx]};
+		}
+	}
+}
+
+// ##update
+template<typename IndexType>
+void update(
+	const NoInitVector<std::pair<IndexType, IndexType>> &WB,
+	const size_t L,
+	std::vector<IndexType> &SA
+) {
+	if (L >= SA.size()) return;
+	decltype(L) R = std::min(SA.size(), L + BLOCK_SIZE);
+	if (L >= R) return;
+
+	#pragma omp parallel for num_threads(NUM_THREADS / 2)
+	for (auto i = L; i < R; i++) {
+		auto& [idx, val] = WB[i - L];
+		if (idx != EMPTY<IndexType>) {
+			SA[idx] = val;
+		}
+	}
+}
+
+// ##induceL
+template<typename IndexType, typename CharType>
+void induceL (
+	const std::vector<CharType> &S,
+	const std::vector<uint8_t> &T,
+	std::vector<IndexType> &SA,
+	NoInitVector<std::pair<CharType, uint8_t>> &RBP,
+	NoInitVector<std::pair<CharType, uint8_t>> &RBI,
+	NoInitVector<std::pair<IndexType, IndexType>> &WBU,
+	NoInitVector<std::pair<IndexType, IndexType>> &WBI,
+	auto &ptr
+) {
+	constexpr auto mask = (BLOCK_SIZE - 1);
+	auto stage = std::vector<std::jthread>{};
+
+	for (IndexType size = SA.size(), i = 0, beg = 0; i < size; i++) {
+		if ((i & mask) == 0) {
+			stage.clear();
+			RBI.swap(RBP);
+			WBI.swap(WBU);
+
+			stage.emplace_back(prepare<IndexType, CharType>,
+				std::ref(S), std::ref(SA), std::ref(T), i + BLOCK_SIZE, std::ref(RBP));
+			stage.emplace_back(update<IndexType>,
+				std::ref(WBU), i - BLOCK_SIZE, std::ref(SA));
+
+			if (i != 0) beg += BLOCK_SIZE;
+		}
+
+		auto induced_idx = SA[i] - 1;
+
+		if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
+			IndexType pos = EMPTY<IndexType>;
+			if (auto [chr, type] = RBI[i - beg]; chr != EMPTY<CharType>) {
+				if (type == L_TYPE) pos = ptr[chr]++;
+			} else if (T[induced_idx] == L_TYPE) {
+				pos = ptr[S[induced_idx]]++;
+			}
+
+			if (pos == EMPTY<IndexType>) continue;
+
+			// if pos is in Bk or Bk + 1 -> write it
+			// otherwise, write it to WB
+			if (pos < beg + (BLOCK_SIZE << 1)) {
+				SA[pos] = induced_idx;
+				WBI[i - beg].first = EMPTY<IndexType>;
+			} else {
+				WBI[i - beg] = {pos, induced_idx};
+			}
+		}
+	}
+}
+
+// ##induceS
+template<typename IndexType, typename CharType>
+void induceS (
+	const std::vector<CharType> &S,
+	const std::vector<uint8_t> &T,
+	std::vector<IndexType> &SA,
+	NoInitVector<std::pair<CharType, uint8_t>> &RBP,
+	NoInitVector<std::pair<CharType, uint8_t>> &RBI,
+	NoInitVector<std::pair<IndexType, IndexType>> &WBU,
+	NoInitVector<std::pair<IndexType, IndexType>> &WBI,
+	auto &ptr
+) {
+	auto stage = std::vector<std::jthread>{};
+
+	for (IndexType size = SA.size(), R = size, beg = size / BLOCK_SIZE * BLOCK_SIZE; R > 0; R--) {
+		if (R == size or R == beg) {
+			stage.clear();
+			RBI.swap(RBP);
+			WBI.swap(WBU);
+
+			if (R == beg) beg -= BLOCK_SIZE;
+
+			stage.emplace_back(prepare<IndexType, CharType>,
+				std::ref(S), std::ref(SA), std::ref(T), beg - BLOCK_SIZE, std::ref(RBP));
+			stage.emplace_back(update<IndexType>,
+				std::ref(WBU), beg + BLOCK_SIZE, std::ref(SA));
+		}
+
+		auto i = R - 1;
+		auto induced_idx = SA[i] - 1;
+
+		if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
+
+			IndexType pos = EMPTY<IndexType>;
+			if (auto [chr, type] = RBI[i - beg]; chr != EMPTY<CharType>) {
+				if (type == S_TYPE) pos = ptr[chr]--;
+			} else if (T[induced_idx] == S_TYPE) {
+				pos = ptr[S[induced_idx]]--;
+			}
+
+			if (pos == EMPTY<IndexType>) continue;
+
+			// if pos is in Bk or Bk - 1 -> write it
+			// otherwise, write it to WB
+			if (pos + BLOCK_SIZE >= beg) {
+				SA[pos] = induced_idx;
+				WBI[i - beg].first = EMPTY<IndexType>;
+			} else {
+				WBI[i - beg] = {pos, induced_idx};
+			}
+		}
+	}
+}
+
+// ##induce_sort
 template<typename IndexType, typename CharType>
 void induce_sort(
 	const std::vector<CharType> &S,
 	const std::vector<uint8_t> &T,
 	const std::vector<IndexType> &SA1,
 	const std::vector<IndexType> &LMS,
-	const std::vector<IndexType> &BA,
+	std::vector<IndexType> &BA,
 	std::vector<IndexType> &SA
 ) {
-	constexpr auto EMPTY = std::numeric_limits<IndexType>::max();
-
 	// induce LMS
 	put_lms(S, LMS, SA1, BA, SA);
 
+	// declare ptr, RBP, RBI, WBI, WBU
+    NoInitVector<IndexType> ptr(BA.size());
+    NoInitVector<std::pair<CharType, uint8_t>> RBP(BLOCK_SIZE), RBI(BLOCK_SIZE);
+    NoInitVector<std::pair<IndexType, IndexType>> WBU(BLOCK_SIZE), WBI(BLOCK_SIZE);
+
+    // init buffer
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+
 	// induce L
-	auto ptr = BA;
-	ptr[0] = 0;
-	for (size_t i = 1; i < ptr.size(); i++) {
-		ptr[i] = BA[i - 1];
-	}
-	for (size_t i = 0; i < SA.size(); i++) {
-		auto idx = SA[i] - 1;
-		if (SA[i] == EMPTY or SA[i] == 0 or T[idx] != L_TYPE) continue;
-		SA[ptr[S[idx]]++] = idx;
-	}
+	psais::utility::parallel_do(ptr.size(), NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
+			for (auto i = L; i < R; i++) {
+				ptr[i] = (i == 0) ? 0 : BA[i - 1];
+			}
+		}
+	);
+	induceL(S, T, SA, RBP, RBI, WBU, WBI, ptr);
+
+    // init buffer
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+    psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+
+	// clean S_TYPE
+	psais::utility::parallel_do(SA.size(), NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
+			for (auto i = L; i < R; i++) {
+				if (i == 0 or SA[i] == EMPTY<IndexType>) continue;
+				if (T[SA[i]] == S_TYPE) {
+					SA[i] = EMPTY<IndexType>;
+				}
+			}
+		}
+	);
 
 	// induce S
-	ptr = BA;
-	for (IndexType i = SA.size() - 1; ~i; i--) {
-		auto idx = SA[i] - 1;
-		if (SA[i] == 0 or T[idx] != S_TYPE) continue;
-		SA[--ptr[S[idx]]] = idx;
-	}
+	psais::utility::parallel_do(ptr.size(), NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
+			for (auto i = L; i < R; i++) {
+				ptr[i] = BA[i] - 1;
+			}
+		}
+	);
+	induceS(S, T, SA, RBP, RBI, WBU, WBI, ptr);
 }
 
 // #preprocess
@@ -213,9 +406,9 @@ auto get_type(const std::vector<CharType> &S) {
 
 	std::vector<uint8_t> flip(NUM_THREADS, false);
 	for (IndexType i = NUM_THREADS - 2; ~i; i--) {
-		if (block_size[i] == 0)
+		if (block_size[i + 1] == 0)
 			continue;
-		
+
 		IndexType x1 = block_left[i + 1] - 1;
 		IndexType x2 = block_left[i + 1];
 		// ...-|----|----|-...
@@ -370,8 +563,6 @@ auto get_lms(const std::vector<uint8_t> &T) {
 // #suffix_array
 template<typename IndexType, typename CharType>
 std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K) {
-	constexpr auto EMPTY = std::numeric_limits<IndexType>::max();
-
 	// 1. get type && bucket array
 	auto T = get_type<IndexType>(S);
 	auto BA = get_bucket(S, K);
@@ -379,7 +570,7 @@ std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K)
 	// 2. induce LMS-substring
 	auto LMS = get_lms<IndexType>(T);
 
-	auto SA = std::vector<IndexType>(S.size(), EMPTY);
+	auto SA = std::vector<IndexType>(S.size(), EMPTY<IndexType>);
 	auto SA1 = std::vector<IndexType>(LMS.size());
 	std::iota(SA1.begin(), SA1.end(), 0);	//TODO: not parallelize
 	induce_sort(S, T, SA1, LMS, BA, SA);
@@ -397,7 +588,7 @@ std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K)
 	}
 
 	// 4. induce orig SA
-	std::fill(SA.begin(), SA.end(), EMPTY);
+	std::fill(SA.begin(), SA.end(), EMPTY<IndexType>);
 	induce_sort(S, T, SA1, LMS, BA, SA);
 
 	return SA;

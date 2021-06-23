@@ -57,24 +57,26 @@ auto name_substr(
 	const IndexType block_size = 1 << 10;
 
 	auto is_same = std::vector<IndexType>(n1, 0);
-	auto result = std::vector<std::future<void>>{};
-	result.reserve(n1 / block_size + 1);
 
-	auto pool = psais::utility::ThreadPool(NUM_THREADS);
-	for (IndexType x = 1; x < n1; x += block_size) {
-		IndexType L = x, R = std::min(n1, L + block_size);
-		result.push_back(
-			pool.enqueue(
-				[&](IndexType L, IndexType R){
-					for (IndexType i = L; i < R; i++)
-						is_same[i] = not is_same_substr(SA1[i - 1], SA1[i]);
-				}, L, R
-			)
-		);
+	{
+		auto result = std::vector<std::future<void>>{};
+		result.reserve(n1 / block_size + 1);
+		auto pool = psais::utility::ThreadPool(NUM_THREADS);
+		for (IndexType x = 1; x < n1; x += block_size) {
+			IndexType L = x, R = std::min(n1, L + block_size);
+			result.push_back(
+				pool.enqueue(
+					[&](IndexType l, IndexType r){
+						for (IndexType i = l; i < r; i++)
+							is_same[i] = not is_same_substr(SA1[i - 1], SA1[i]);
+					}, L, R
+				)
+			);
+		}
+
+		for (auto &f : result)
+			f.get();
 	}
-
-	for (auto &f : result)
-		f.get();
 
 	psais::utility::parallel_prefix_sum(is_same, NUM_THREADS);
 
@@ -544,7 +546,7 @@ std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K)
 	}
 
 	// 4. induce orig SA
-	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY);
+	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);
 	induce_sort(S, T, SA1, LMS, BA, SA);
 
 	return SA;

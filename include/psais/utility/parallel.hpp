@@ -91,37 +91,35 @@ void parallel_prefix_sum(
 	);
 }
 
-template <typename Compare, typename Project>
+template <typename ReturnContainer, typename Compare, typename Project>
 auto parallel_take_if(
 	std::integral auto n_jobs,
 	std::integral auto n_threads,
 	Compare &&compare,
 	Project &&project
 ) {
-
-	using ProjectReturnType = std::invoke_result_t<Project, size_t>;
-
-	std::vector<std::vector<ProjectReturnType>> stk(n_threads);
+	std::vector<ReturnContainer> buf(n_threads);
 	for (decltype(n_threads) i = 0; i < n_threads; i++)
-		stk.reserve(n_jobs / n_threads + 1);
+		buf.reserve(n_jobs / n_threads + 1);
 
 	psais::utility::parallel_do(n_jobs, n_threads,
 		[&](auto L, auto R, auto tid) {
 			for (auto i = L; i < R; i++)
 				if (compare(i))
-					stk[tid].push_back(project(i));
+					buf[tid].push_back(project(i));
 		}
 	);
 
 	std::vector<size_t> offset(n_threads + 1, 0);
 	for (decltype(n_threads) i = 0; i < n_threads; i++)
-		offset[i + 1] = offset[i] + stk[i].size();
+		offset[i + 1] = offset[i] + buf[i].size();
 
-	std::vector<ProjectReturnType> ret(offset.back());
+	ReturnContainer ret(offset.back());
+
 	psais::utility::parallel_do(n_jobs, n_threads,
 		[&](auto, auto, auto tid) {
-			for (size_t i = 0; i < stk[tid].size(); i++)
-				ret[offset[tid] + i] = stk[tid][i];
+			for (size_t i = 0; i < buf[tid].size(); i++)
+				ret[offset[tid] + i] = buf[tid][i];
 		}
 	);
 

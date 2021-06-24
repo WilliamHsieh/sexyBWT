@@ -36,9 +36,9 @@ inline bool is_LMS(auto &v, auto i) {
 // #name_substr
 template<typename IndexType, typename CharType>
 auto name_substr(
-	const std::vector<CharType> &S,
-	const std::vector<uint8_t> &T,
-	const std::vector<IndexType> &SA
+	const NoInitVector<CharType> &S,
+	const NoInitVector<uint8_t> &T,
+	const NoInitVector<IndexType> &SA
 ) {
 	auto is_same_substr = [&S, &T] (auto x, auto y) {
 		do {
@@ -48,7 +48,7 @@ auto name_substr(
 	};
 
 	IndexType n = (IndexType)S.size();
-	auto SA1 = psais::utility::parallel_take_if(n, NUM_THREADS,
+	auto SA1 = psais::utility::parallel_take_if<NoInitVector<IndexType>>(n, NUM_THREADS,
 		[&](IndexType i) { return is_LMS(T, SA[i]); },
 		[&](IndexType i) { return SA[i]; }
 	);
@@ -56,7 +56,8 @@ auto name_substr(
 	IndexType n1 = (IndexType)SA1.size();
 	const IndexType block_size = 1 << 10;
 
-	auto is_same = std::vector<IndexType>(n1, 0);
+	auto is_same = NoInitVector<IndexType>(n1);
+	psais::utility::parallel_init(n1, NUM_THREADS, is_same, 0);
 
 	{
 		auto result = std::vector<std::future<void>>{};
@@ -80,8 +81,9 @@ auto name_substr(
 
 	psais::utility::parallel_prefix_sum(is_same, NUM_THREADS);
 
-	constexpr auto EMPTY = std::numeric_limits<IndexType>::max();
-	std::vector<IndexType> name(n, EMPTY);
+	NoInitVector<IndexType> name(n);
+	psais::utility::parallel_init(n, NUM_THREADS, name, EMPTY<IndexType>);
+
 	psais::utility::parallel_do(n1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = L; i < R; i++)
@@ -89,8 +91,8 @@ auto name_substr(
 		}
 	);
 
-	auto S1 = psais::utility::parallel_take_if(n, NUM_THREADS,
-		[&](IndexType i) { return name[i] != EMPTY; },
+	auto S1 = psais::utility::parallel_take_if<NoInitVector<IndexType>>(n, NUM_THREADS,
+		[&](IndexType i) { return name[i] != EMPTY<IndexType>; },
 		[&](IndexType i) { return name[i]; }
 	);
 
@@ -103,15 +105,16 @@ auto name_substr(
 // ##put_lms
 template<typename IndexType, typename CharType>
 auto put_lms(
-	const std::vector<CharType> &S,
-	const std::vector<IndexType> &LMS,
-	const std::vector<IndexType> &SA1,
-	const std::vector<IndexType> &BA,
-	std::vector<IndexType> &SA
+	const NoInitVector<CharType> &S,
+	const NoInitVector<IndexType> &LMS,
+	const NoInitVector<IndexType> &SA1,
+	const NoInitVector<IndexType> &BA,
+	NoInitVector<IndexType> &SA
 ) {
 	IndexType n1 = (IndexType)SA1.size();
 	IndexType K = (IndexType)BA.size() - 1;
-	IndexType *S1 = new IndexType[n1];
+
+	NoInitVector<IndexType> S1(n1);
 	psais::utility::parallel_do(n1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = L; i < R; i++)
@@ -119,10 +122,10 @@ auto put_lms(
 		}
 	);
 
-	IndexType *local_BA = new IndexType[1ull * (K + 1) * NUM_THREADS];
+	NoInitVector<IndexType> local_BA(1ull * (K + 1) * NUM_THREADS);
 	psais::utility::parallel_do(NUM_THREADS, NUM_THREADS,
 		[&](IndexType, IndexType, IndexType tid) {
-			IndexType *ptr = local_BA + tid * (K + 1);
+			IndexType *ptr = local_BA.data() + tid * (K + 1);
 			for (IndexType i = 0; i < K + 1; i++)
 				ptr[i] = 0;
 		}
@@ -130,7 +133,7 @@ auto put_lms(
 
 	psais::utility::parallel_do(n1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType tid) {
-			IndexType *ptr = local_BA + tid * (K + 1);
+			IndexType *ptr = local_BA.data() + tid * (K + 1);
 			for (IndexType i = L; i < R; i++) {
 				IndexType idx = S1[i];
 				ptr[S[idx]]++;
@@ -141,8 +144,8 @@ auto put_lms(
 	psais::utility::parallel_do(K + 1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = NUM_THREADS - 2; ~i; i--) {
-				auto *w_ptr = local_BA + (i    ) * (K + 1);
-				auto *r_ptr = local_BA + (i + 1) * (K + 1);
+				auto *w_ptr = local_BA.data() + (i    ) * (K + 1);
+				auto *r_ptr = local_BA.data() + (i + 1) * (K + 1);
 				for (IndexType j = L; j < R; j++)
 					w_ptr[j] += r_ptr[j];
 			}
@@ -151,7 +154,7 @@ auto put_lms(
 
 	psais::utility::parallel_do(n1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType tid) {
-			auto *ptr = local_BA + tid * (K + 1);
+			auto *ptr = local_BA.data() + tid * (K + 1);
 			for (IndexType i = L; i < R; i++) {
 				IndexType idx = S1[i];
 				IndexType offset = ptr[S[idx]]--;
@@ -159,16 +162,14 @@ auto put_lms(
 			}
 		}
 	);
-	delete S1;
-	delete local_BA;
 }
 
 // ##prepare
 template<typename IndexType, typename CharType>
 void prepare(
-	const std::vector<CharType> &S,
-	const std::vector<IndexType> &SA,
-	const std::vector<uint8_t> &T,
+	const NoInitVector<CharType> &S,
+	const NoInitVector<IndexType> &SA,
+	const NoInitVector<uint8_t> &T,
 	const size_t L,
 	NoInitVector<std::pair<CharType, uint8_t>> &RB
 ) {
@@ -193,7 +194,7 @@ template<typename IndexType>
 void update(
 	const NoInitVector<std::pair<IndexType, IndexType>> &WB,
 	const size_t L,
-	std::vector<IndexType> &SA
+	NoInitVector<IndexType> &SA
 ) {
 	if (L >= SA.size()) return;
 	decltype(L) R = std::min(SA.size(), L + BLOCK_SIZE);
@@ -211,9 +212,9 @@ void update(
 // ##induceL
 template<typename IndexType, typename CharType>
 void induceL (
-	const std::vector<CharType> &S,
-	const std::vector<uint8_t> &T,
-	std::vector<IndexType> &SA,
+	const NoInitVector<CharType> &S,
+	const NoInitVector<uint8_t> &T,
+	NoInitVector<IndexType> &SA,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBP,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBI,
 	NoInitVector<std::pair<IndexType, IndexType>> &WBU,
@@ -264,9 +265,9 @@ void induceL (
 // ##induceS
 template<typename IndexType, typename CharType>
 void induceS (
-	const std::vector<CharType> &S,
-	const std::vector<uint8_t> &T,
-	std::vector<IndexType> &SA,
+	const NoInitVector<CharType> &S,
+	const NoInitVector<uint8_t> &T,
+	NoInitVector<IndexType> &SA,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBP,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBI,
 	NoInitVector<std::pair<IndexType, IndexType>> &WBU,
@@ -318,12 +319,12 @@ void induceS (
 // ##induce_sort
 template<typename IndexType, typename CharType>
 void induce_sort(
-	const std::vector<CharType> &S,
-	const std::vector<uint8_t> &T,
-	const std::vector<IndexType> &SA1,
-	const std::vector<IndexType> &LMS,
-	std::vector<IndexType> &BA,
-	std::vector<IndexType> &SA
+	const NoInitVector<CharType> &S,
+	const NoInitVector<uint8_t> &T,
+	const NoInitVector<IndexType> &SA1,
+	const NoInitVector<IndexType> &LMS,
+	NoInitVector<IndexType> &BA,
+	NoInitVector<IndexType> &SA
 ) {
 	// induce LMS
 	put_lms(S, LMS, SA1, BA, SA);
@@ -382,9 +383,9 @@ void induce_sort(
 
 // ##get_type
 template<typename IndexType, typename CharType>
-auto get_type(const std::vector<CharType> &S) {
+auto get_type(const NoInitVector<CharType> &S) {
 	IndexType n = S.size();
-	std::vector<uint8_t> T(n, S_TYPE);
+	NoInitVector<uint8_t> T(n);
 	std::vector<IndexType> same_char_suffix_len(NUM_THREADS, 0);
 	std::vector<IndexType> block_size(NUM_THREADS, 0);
 	std::vector<IndexType> block_left(NUM_THREADS, 0);
@@ -463,39 +464,31 @@ auto get_type(const std::vector<CharType> &S) {
 
 // ##get_bucket
 template<typename IndexType, typename CharType>
-auto get_bucket(const std::vector<CharType> &S, IndexType K) {
-	auto BA = std::vector<IndexType>(K + 1, 0);
+auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
+	NoInitVector<IndexType> local_BA(1ull * (K + 1) * NUM_THREADS);
+	psais::utility::parallel_init(local_BA.size(), NUM_THREADS, local_BA, 0);
+
 	IndexType n = S.size();
-
-	IndexType *local_BA = new IndexType[1ull * (K + 1) * NUM_THREADS];
-
-	psais::utility::parallel_do(NUM_THREADS, NUM_THREADS,
-		[&](IndexType, IndexType, IndexType tid) {
-			IndexType *ptr = local_BA + tid * (K + 1);
-			for (IndexType i = 0; i < K + 1; i++)
-				ptr[i] = 0;
-		}
-	);
-
 	psais::utility::parallel_do(n, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType tid) {
-			IndexType *ptr = local_BA + tid * (K + 1);
+			IndexType *ptr = local_BA.data() + tid * (K + 1);
 			for (IndexType i = L; i < R; i++)
 				ptr[S[i]]++;
 		}
 	);
 
+	auto BA = NoInitVector<IndexType>(K + 1);
+	psais::utility::parallel_init(K + 1, NUM_THREADS, BA, 0);
+
 	psais::utility::parallel_do(K + 1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = 0; i < NUM_THREADS; i++) {
-				IndexType *ptr = local_BA + i * (K + 1);
+				IndexType *ptr = local_BA.data() + i * (K + 1);
 				for (IndexType j = L; j < R; j++)
 					BA[j] += ptr[j];
 			}
 		}
 	);
-
-	delete local_BA;
 
 	psais::utility::parallel_prefix_sum(BA, NUM_THREADS);
 
@@ -504,8 +497,8 @@ auto get_bucket(const std::vector<CharType> &S, IndexType K) {
 
 // ##get_lms
 template<typename IndexType>
-auto get_lms(const std::vector<uint8_t> &T) {
-	return psais::utility::parallel_take_if(T.size(), NUM_THREADS,
+auto get_lms(const NoInitVector<uint8_t> &T) {
+	return psais::utility::parallel_take_if<NoInitVector<IndexType>>(T.size(), NUM_THREADS,
 		[&](IndexType i) { return is_LMS(T, i); },
 		[ ](IndexType i) { return i; }
 	);
@@ -513,7 +506,7 @@ auto get_lms(const std::vector<uint8_t> &T) {
 
 // #suffix_array
 template<typename IndexType, typename CharType>
-std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K) {
+NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType K) {
 	// 1. get type && bucket array
 	auto T = get_type<IndexType>(S);
 	auto BA = get_bucket(S, K);
@@ -521,8 +514,10 @@ std::vector<IndexType> suffix_array(const std::vector<CharType> &S, IndexType K)
 	// 2. induce LMS-substring
 	auto LMS = get_lms<IndexType>(T);
 
-	auto SA = std::vector<IndexType>(S.size(), EMPTY<IndexType>);
-	auto SA1 = std::vector<IndexType>(LMS.size());
+	auto SA = NoInitVector<IndexType>(S.size(), EMPTY<IndexType>);
+	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);
+
+	auto SA1 = NoInitVector<IndexType>(LMS.size());
 
 	// iota SA1
 	psais::utility::parallel_do(SA1.size(), NUM_THREADS,
@@ -559,10 +554,14 @@ auto suffix_array(std::string_view s) {
 	for (auto c : s) idx[c] = 1;
 	for (auto &x : idx) if(x) x = ++K;
 
-	auto res = std::vector<uint8_t>(s.size() + 1, 0);
-	for (size_t i = 0; i < s.size(); i++) {
-		res[i] = idx[s[i]];
-	}
+	auto res = NoInitVector<uint8_t>(s.size() + 1);
+	psais::utility::parallel_do(s.size(), NUM_THREADS,
+		[&](IndexType L, IndexType R, IndexType) {
+			for (IndexType i = L; i < R; i++)
+				res[i] = idx[s[i]];
+		}
+	);
+	res[s.size()] = 0;
 
 	return suffix_array(res, K);
 }

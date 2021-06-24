@@ -54,17 +54,16 @@ auto name_substr(
 	);
 
 	IndexType n1 = (IndexType)SA1.size();
-	const IndexType block_size = 1 << 10;
 
 	auto is_same = NoInitVector<IndexType>(n1);
 	psais::utility::parallel_init(n1, NUM_THREADS, is_same, 0);
 
 	{
 		auto result = std::vector<std::future<void>>{};
-		result.reserve(n1 / block_size + 1);
+		result.reserve(n1 / BLOCK_SIZE + 1);
 		auto pool = psais::utility::ThreadPool(NUM_THREADS);
-		for (IndexType x = 1; x < n1; x += block_size) {
-			IndexType L = x, R = std::min(n1, L + block_size);
+		for (IndexType x = 1; x < n1; x += BLOCK_SIZE) {
+			IndexType L = x, R = std::min(n1, L + BLOCK_SIZE);
 			result.push_back(
 				pool.enqueue(
 					[&](IndexType l, IndexType r){

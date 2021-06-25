@@ -3,6 +3,7 @@
 #include <thread>
 #include <boost/core/noinit_adaptor.hpp>
 
+// #utility
 namespace psais::utility {
 
 template<typename T>
@@ -11,6 +12,7 @@ std::reference_wrapper<std::remove_reference_t<T>> wrapper(T& t) { return std::r
 template<typename T>
 T&& wrapper(std::remove_reference_t<T>&& t) { return std::move(t); }
 
+// #parallel_do
 template <typename Func, typename ... Args>
 void parallel_do (
 	std::integral auto n_jobs,
@@ -33,6 +35,7 @@ void parallel_do (
 	}
 }
 
+// #parallel_init
 template <typename Vec, typename Val>
 void parallel_init (
 	std::integral auto n_jobs,
@@ -49,6 +52,7 @@ void parallel_init (
 	);
 }
 
+// #parallel_prefix_sum
 template <typename Vec>
 void parallel_prefix_sum(
 	Vec& vec,
@@ -91,6 +95,7 @@ void parallel_prefix_sum(
 	);
 }
 
+// #parallel_take_if
 template <typename Compare, typename Project>
 auto parallel_take_if(
 	std::integral auto n_jobs,

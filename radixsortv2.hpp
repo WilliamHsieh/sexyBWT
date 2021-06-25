@@ -459,9 +459,10 @@ void using_omp(uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt local[N_THREA
     }
 }
 
-
-int main(int argc, const char * argv[]) {
-    vector<int> seq = read_fasta_file("20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+template<typename T>
+std::vector<uint64_t>
+radix_sort(vector<T> &seq, vector<uint64_t> &idx, uint64_t kmers){
+//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
     
     //VARIABLE INTIALIZATION
     vector<int> local;
@@ -471,10 +472,10 @@ int main(int argc, const char * argv[]) {
     thread_cnt histogram_local[N_THREADS];
     thread_cnt histogram_global[N_THREADS];
     vector<uint64_t> sorted_index(seq.size(),0);
-    uint64_t kmers = 5;
-    vector<uint64_t> idx = get_full_idx(seq);
-    cout << "Len seq: " << seq.size() << endl;
-    cout << "Len idx: " << idx.size() << endl;
+//    uint64_t kmers = 5;
+//    vector<uint64_t> idx = get_full_idx(seq);
+//    cout << "Len seq: " << seq.size() << endl;
+//    cout << "Len idx: " << idx.size() << endl;
 
     int k_idx = 0; int last = 0;
     for(int k=kmers-DEPTH; k>=-1; ){
@@ -498,62 +499,107 @@ int main(int argc, const char * argv[]) {
         k -= DEPTH;
     }
     if(last == 0){
-        print_sorted_idx(sorted_index,-1);
+        return sorted_index;
     }else{
-        print_sorted_idx(idx,kmers);
+        return idx_temp;
     }
-    /*
-    // STEP 1
-    auto t1 = high_resolution_clock::now();
-    key_counting(seq, k, idx, histogram_local);
-    auto t2 = high_resolution_clock::now();
-    duration<double, milli> ms_double = t2 - t1;
-    cout<< "STEP 1     | " << ms_double.count() << "ms          |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
-    cout << endl;
-
-    // STEP 2 & 3
-    // SIMD and BASIC ADDITION PER LINE
-    vector<uint64_t> sorted_index(seq.size(),0);
-    for (int j = 0; j < 4; j++){
-        auto t1 = high_resolution_clock::now();
-        if (j<2){
-            //FROM LOCAL TO GLOBAL HISTOGRAM
-            local2global_hist(j, threadResult, histogram_local, tempResult, threadB, histogram_global);
-            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-            auto ts1 = high_resolution_clock::now();
-            suffix_placement(seq, k, idx, histogram_global, sorted_index);
-            auto ts2 = high_resolution_clock::now();
-            duration<double, milli> ms_double_s3 = ts2 - ts1;
-            cout<< "STEP 3     | " << ms_double_s3.count() << "ms          |" << " x256 : " << ms_double_s3.count()*256 << "ms " << endl;
-
-        }
-        else if(j==2){
-            //FROM LOCAL TO GLOBAL HISTOGRAM
-            using_thread(threadResult, histogram_local, tempResult, threadB, histogram_global);
-            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-            suffix_placement(seq, k, idx, histogram_global, sorted_index);
-        }
-        else{
-            //FROM LOCAL TO GLOBAL HISTOGRAM
-            using_omp(threadResult, histogram_local, tempResult, threadB, histogram_global);
-            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-            suffix_placement(seq, k, idx, histogram_global, sorted_index);
-        }
-        
-        auto t2 = high_resolution_clock::now();
-        duration<double, milli> ms_double = t2 - t1;
-        cout<< "STEP 2 + 3 | MODE: " << j << " " <<ms_double.count() << "ms |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
-        cout << endl;
-    } */
-    
-    // PRINT THE GLOBAL HISTOGRAM
-//    cout << "GLOBAL HISTOGRAM: ";
-//    for(int i=0; i<N_THREADS; i++){
-//        for(int j=0; j<N_KEYS; j++){
-//            cout << histogram_global[i].cnt[j] << " ";
-//        }
-//    }
-//    cout << endl;
-    
-    return 0;
 }
+
+
+//int main(int argc, const char * argv[]) {
+//    vector<int> seq = read_fasta_file("20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+//
+//    //VARIABLE INTIALIZATION
+//    vector<int> local;
+//    uint64_t tempResult[N_THREADS*cnt_size];
+//    uint64_t threadResult[N_THREADS*cnt_size];
+//    uint64_t threadB[N_THREADS*cnt_size];
+//    thread_cnt histogram_local[N_THREADS];
+//    thread_cnt histogram_global[N_THREADS];
+//    vector<uint64_t> sorted_index(seq.size(),0);
+//    uint64_t kmers = 5;
+//    vector<uint64_t> idx = get_full_idx(seq);
+//    cout << "Len seq: " << seq.size() << endl;
+//    cout << "Len idx: " << idx.size() << endl;
+//
+//    int k_idx = 0; int last = 0;
+//    for(int k=kmers-DEPTH; k>=-1; ){
+//        if (k < 0){
+//            k = 0;
+//        }
+//        if(k_idx%2==0){
+//            key_counting(seq, k, idx, histogram_local);
+//            local2global_hist(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
+//            suffix_placement(seq, k, idx, histogram_global, sorted_index);
+//            last = 0;
+//        }
+//        else{
+//            key_counting(seq, k, sorted_index, histogram_local);
+//            local2global_hist(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
+//            suffix_placement(seq, k, sorted_index, histogram_global, idx);
+//            last = 1;
+//        }
+//
+//        k_idx++;
+//        k -= DEPTH;
+//    }
+//    if(last == 0){
+//        print_sorted_idx(sorted_index,-1);
+//    }else{
+//        print_sorted_idx(idx,kmers);
+//    }
+//    /*
+//    // STEP 1
+//    auto t1 = high_resolution_clock::now();
+//    key_counting(seq, k, idx, histogram_local);
+//    auto t2 = high_resolution_clock::now();
+//    duration<double, milli> ms_double = t2 - t1;
+//    cout<< "STEP 1     | " << ms_double.count() << "ms          |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
+//    cout << endl;
+//
+//    // STEP 2 & 3
+//    // SIMD and BASIC ADDITION PER LINE
+//    vector<uint64_t> sorted_index(seq.size(),0);
+//    for (int j = 0; j < 4; j++){
+//        auto t1 = high_resolution_clock::now();
+//        if (j<2){
+//            //FROM LOCAL TO GLOBAL HISTOGRAM
+//            local2global_hist(j, threadResult, histogram_local, tempResult, threadB, histogram_global);
+//            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
+//            auto ts1 = high_resolution_clock::now();
+//            suffix_placement(seq, k, idx, histogram_global, sorted_index);
+//            auto ts2 = high_resolution_clock::now();
+//            duration<double, milli> ms_double_s3 = ts2 - ts1;
+//            cout<< "STEP 3     | " << ms_double_s3.count() << "ms          |" << " x256 : " << ms_double_s3.count()*256 << "ms " << endl;
+//
+//        }
+//        else if(j==2){
+//            //FROM LOCAL TO GLOBAL HISTOGRAM
+//            using_thread(threadResult, histogram_local, tempResult, threadB, histogram_global);
+//            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
+//            suffix_placement(seq, k, idx, histogram_global, sorted_index);
+//        }
+//        else{
+//            //FROM LOCAL TO GLOBAL HISTOGRAM
+//            using_omp(threadResult, histogram_local, tempResult, threadB, histogram_global);
+//            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
+//            suffix_placement(seq, k, idx, histogram_global, sorted_index);
+//        }
+//
+//        auto t2 = high_resolution_clock::now();
+//        duration<double, milli> ms_double = t2 - t1;
+//        cout<< "STEP 2 + 3 | MODE: " << j << " " <<ms_double.count() << "ms |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
+//        cout << endl;
+//    } */
+//
+//    // PRINT THE GLOBAL HISTOGRAM
+////    cout << "GLOBAL HISTOGRAM: ";
+////    for(int i=0; i<N_THREADS; i++){
+////        for(int j=0; j<N_KEYS; j++){
+////            cout << histogram_global[i].cnt[j] << " ";
+////        }
+////    }
+////    cout << endl;
+//
+//    return 0;
+//}

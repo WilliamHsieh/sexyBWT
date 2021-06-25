@@ -14,14 +14,20 @@ auto suffix_array(std::string_view s) {
 	return res;
 }
 
-int main() {
+int main(int argc, char**) {
 	using IndexType = uint32_t;
+	if (argc == 2) {
+		std::cout << "pid: " << getpid() << std::endl;
+		sleep(10);
+	}
 
-	auto len = 10000;
+	auto len = 10000000;
 	auto gen = std::mt19937(std::random_device{}());
 	auto dis = std::uniform_int_distribution(0, 25);
 
-	for (int i = 0; i < 100; i++) {
+	for (int i = 0; i < 10; i++) {
+		std::cout << i + 1 << '\n';
+
 		std::string str;
 		for (int j = 0; j < len; j++) {
 			str += 'a' + dis(gen);

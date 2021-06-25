@@ -17,6 +17,7 @@
 #define N_THREADS 4
 #define DOLLAR 0
 #define DEPTH 2
+#define CNT_SIZE std::pow(N_KEYS, DEPTH)
 
 using namespace std;
 
@@ -25,7 +26,6 @@ using chrono::high_resolution_clock;
 using chrono::duration_cast;
 using chrono::duration;
 using chrono::milliseconds;
-int cnt_size = std::pow(N_KEYS, DEPTH);
 
 vector<int> read_fasta_file(string path) {
     //A, C, G, T, $ as 1, 2, 3, 4, 0
@@ -71,7 +71,7 @@ vector<int> read_fasta_file(string path) {
 
 struct alignas(64) thread_cnt
 {
-    uint64_t cnt[25];
+    uint64_t cnt[CNT_SIZE];
 };
 
 void print_sorted_idx(vector<uint64_t> &sorted_index, int k){
@@ -150,8 +150,8 @@ void key_counting_helper(uint64_t start, uint64_t end, int tid, thread_cnt (&his
     uint64_t b, index;
     std::vector<uint64_t>::iterator found;
     
-    uint64_t cnt[cnt_size];
-    for(int i=0; i<cnt_size; i++) cnt[i]=0;
+    uint64_t cnt[CNT_SIZE];
+    for(int i=0; i<CNT_SIZE; i++) cnt[i]=0;
     
     for (uint64_t i=start; i<end; i++) {
         
@@ -176,12 +176,12 @@ void key_counting_helper(uint64_t start, uint64_t end, int tid, thread_cnt (&his
     }
 //    cout << endl;
     uint64_t acc = 0;
-         for(int i=0; i<cnt_size; i++){
+         for(int i=0; i<CNT_SIZE; i++){
              cnt[i] += acc;
              acc = cnt[i];
          }
     
-    copy(cnt, cnt+cnt_size, histogram[tid].cnt);
+    copy(cnt, cnt+CNT_SIZE, histogram[tid].cnt);
 }
 
 void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt (&histogram)[N_THREADS])
@@ -212,7 +212,7 @@ void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt
 //     test to print histogram
     for(int i=0; i<N_THREADS; i++){
         cout << "cnt tid-" << i << ": ";
-        for(int j=0; j<cnt_size; j++){
+        for(int j=0; j<CNT_SIZE; j++){
             cout << histogram[i].cnt[j] << "; ";
         }
         cout << endl;
@@ -238,22 +238,22 @@ void old_style(uint64_t a[N_THREADS*N_KEYS], uint64_t b[N_THREADS*N_KEYS], uint6
         }
 }
 
-void simd_style(uint64_t a[N_THREADS*cnt_size], uint64_t b[N_THREADS*cnt_size], uint64_t c[N_THREADS*cnt_size]){
-    int64<N_THREADS*25> A = load(a);
-    int64<N_THREADS*25> B = load(b);
-    int64<N_THREADS*25> C = add(A, B);
+void simd_style(uint64_t a[N_THREADS*CNT_SIZE], uint64_t b[N_THREADS*CNT_SIZE], uint64_t c[N_THREADS*CNT_SIZE]){
+    int64<N_THREADS*CNT_SIZE> A = load(a);
+    int64<N_THREADS*CNT_SIZE> B = load(b);
+    int64<N_THREADS*CNT_SIZE> C = add(A, B);
     
     store(c, C);
     
 }
 
-void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*cnt_size], thread_cnt local[cnt_size], uint64_t tempResult[N_THREADS*cnt_size], uint64_t threadB[N_THREADS*cnt_size], thread_cnt histogram[cnt_size]){
+void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*CNT_SIZE], thread_cnt local[CNT_SIZE], uint64_t tempResult[N_THREADS*CNT_SIZE], uint64_t threadB[N_THREADS*CNT_SIZE], thread_cnt histogram[CNT_SIZE]){
     
-    uint64_t cnt[cnt_size];
+    uint64_t cnt[CNT_SIZE];
     for (int th = 0; th < N_THREADS; ++th){
         int pos = 0;
         for (int iterator = 0; iterator < N_THREADS; ++iterator){
-            for(int idx = 0; idx < cnt_size; idx++){
+            for(int idx = 0; idx < CNT_SIZE; idx++){
                 if (iterator < th){
                     if(idx == 0){
                         threadResult[pos] = 0;
@@ -271,7 +271,7 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*cnt_size], thre
             }
         }
         if(th == 0){
-            for (int i = 0; i < N_THREADS*cnt_size; i++){
+            for (int i = 0; i < N_THREADS*CNT_SIZE; i++){
                 tempResult[i] = threadResult[i];
                 threadResult[i] = 0;
             }
@@ -285,7 +285,7 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*cnt_size], thre
                 old_style(threadResult, tempResult, threadB);
             }
 
-            for (int i = 0; i < N_THREADS*cnt_size; i++){
+            for (int i = 0; i < N_THREADS*CNT_SIZE; i++){
                 tempResult[i] = threadB[i];
                 threadResult[i] = 0;
                 threadB[i] = 0;
@@ -296,17 +296,17 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*cnt_size], thre
     }
     
     for (int th = 0; th<N_THREADS; th++){
-        for (int key = 0; key<cnt_size; key++){
-            cnt[key] = tempResult[th*cnt_size+key];
+        for (int key = 0; key<CNT_SIZE; key++){
+            cnt[key] = tempResult[th*CNT_SIZE+key];
         }
-        copy(cnt, cnt+cnt_size, histogram[th].cnt);
+        copy(cnt, cnt+CNT_SIZE, histogram[th].cnt);
     }
 }
 
 void suffix_placement_helper(uint64_t start, uint64_t end, int tid, thread_cnt (&global_histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, vector<uint64_t> &sorted_index, int k){
     
-    uint64_t n_placement[cnt_size];
-    for(int i=0; i<cnt_size; i++) n_placement[i]=0;
+    uint64_t n_placement[CNT_SIZE];
+    for(int i=0; i<CNT_SIZE; i++) n_placement[i]=0;
     uint64_t key = 0; uint64_t idx_i = 0; uint64_t len = seq.size();
     string s1, s2, s3;
     uint64_t b;
@@ -466,9 +466,9 @@ radix_sort(vector<T> &seq, vector<uint64_t> &idx, uint64_t kmers){
     
     //VARIABLE INTIALIZATION
     vector<int> local;
-    uint64_t tempResult[N_THREADS*cnt_size];
-    uint64_t threadResult[N_THREADS*cnt_size];
-    uint64_t threadB[N_THREADS*cnt_size];
+    uint64_t tempResult[N_THREADS*CNT_SIZE];
+    uint64_t threadResult[N_THREADS*CNT_SIZE];
+    uint64_t threadB[N_THREADS*CNT_SIZE];
     thread_cnt histogram_local[N_THREADS];
     thread_cnt histogram_global[N_THREADS];
     vector<uint64_t> sorted_index(seq.size(),0);
@@ -511,9 +511,9 @@ radix_sort(vector<T> &seq, vector<uint64_t> &idx, uint64_t kmers){
 //
 //    //VARIABLE INTIALIZATION
 //    vector<int> local;
-//    uint64_t tempResult[N_THREADS*cnt_size];
-//    uint64_t threadResult[N_THREADS*cnt_size];
-//    uint64_t threadB[N_THREADS*cnt_size];
+//    uint64_t tempResult[N_THREADS*CNT_SIZE];
+//    uint64_t threadResult[N_THREADS*CNT_SIZE];
+//    uint64_t threadB[N_THREADS*CNT_SIZE];
 //    thread_cnt histogram_local[N_THREADS];
 //    thread_cnt histogram_global[N_THREADS];
 //    vector<uint64_t> sorted_index(seq.size(),0);

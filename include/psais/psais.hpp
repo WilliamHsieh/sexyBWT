@@ -503,7 +503,7 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 	// 2. induce LMS-substring
 	auto LMS = get_lms<IndexType>(T);
 
-	auto SA = NoInitVector<IndexType>(S.size(), EMPTY<IndexType>);
+	auto SA = NoInitVector<IndexType>(S.size());
 	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);
 
 	auto SA1 = NoInitVector<IndexType>(LMS.size());

@@ -4,6 +4,9 @@ CCFLAG = -Iinclude -std=c++20 -Wall -Wextra -Wshadow -fopenmp -pthread -Ofast
 test-psais:
 	$(CC) $(CCFLAG) tests/psais/psais.cpp
 
+example-fasta:
+	$(CC) $(CCFLAG) example/fasta.cpp
+
 test-ThreadPool:
 	$(CC) $(CCFLAG) tests/psais/utility/thread_pool.cpp
 

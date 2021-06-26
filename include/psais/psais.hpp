@@ -226,16 +226,16 @@ void induce (
 	IndexType size = SA.size();
 	std::vector<std::jthread> stage;
 
-	auto is_adjacent = [BLOCK_SIZE = BLOCK_SIZE](auto pos, auto beg) {
+	auto is_adjacent = [BLOCK_SIZE = BLOCK_SIZE](auto pos, auto L) {
 		if constexpr (TYPE == L_TYPE) {
-			return pos < beg + (BLOCK_SIZE << 1);
+			return pos < L + (BLOCK_SIZE << 1);
 		} else {
-			return pos + BLOCK_SIZE >= beg;
+			return pos + BLOCK_SIZE >= L;
 		}
 	};
 
 	// views
-	auto block_view = []() {
+	constexpr auto block_view = [] {
 		if constexpr (TYPE == L_TYPE) {
 			return std::views::all;
 		} else {
@@ -256,28 +256,31 @@ void induce (
 	}
 
 	// pipeline
-	for (IndexType beg : block | block_view) {
+	for (IndexType L : block | block_view) {
 		stage.clear();
 		RBI.swap(RBP);
 		WBI.swap(WBU);
 
 		// prepare && update
-		IndexType P_L = beg + BLOCK_SIZE;
-		IndexType U_L = beg - BLOCK_SIZE;
+		IndexType P_L = L + BLOCK_SIZE;
+		IndexType U_L = L - BLOCK_SIZE;
 		if constexpr (TYPE == S_TYPE) {
 			std::swap(P_L, U_L);
 		}
 
-		stage.emplace_back(prepare<IndexType, CharType>, P_L, std::ref(S), std::ref(SA), std::ref(T), std::ref(RBP));
-		stage.emplace_back(update<IndexType>, U_L, std::ref(WBU), std::ref(SA));
+		stage.emplace_back(prepare<IndexType, CharType>, P_L,
+				std::ref(S), std::ref(SA), std::ref(T), std::ref(RBP));
+		stage.emplace_back(update<IndexType>, U_L,
+				std::ref(WBU), std::ref(SA));
 
 		// induce
-		for (IndexType i : std::views::iota(beg, std::min(beg + BLOCK_SIZE, size)) | block_view) {
+		auto R = std::min(L + BLOCK_SIZE, size);
+		for (IndexType i : std::views::iota(L, R) | block_view) {
 			auto induced_idx = SA[i] - 1;
 
 			if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
 				auto chr = EMPTY<CharType>;
-				if (auto [c, t] = RBI[i - beg]; c != EMPTY<CharType>) {
+				if (auto [c, t] = RBI[i - L]; c != EMPTY<CharType>) {
 					if (t == TYPE) chr = c;
 				} else if (T[induced_idx] == TYPE) {
 					chr = S[induced_idx];
@@ -294,11 +297,11 @@ void induce (
 
 				// if pos is in adjacent block -> directly write it
 				// otherwise, write it to WB
-				if (is_adjacent(pos, beg)) {
+				if (is_adjacent(pos, L)) {
 					SA[pos] = induced_idx;
-					WBI[i - beg].first = EMPTY<IndexType>;
+					WBI[i - L].first = EMPTY<IndexType>;
 				} else {
-					WBI[i - beg] = {pos, induced_idx};
+					WBI[i - L] = {pos, induced_idx};
 				}
 			}
 		}
@@ -558,5 +561,6 @@ auto suffix_array(std::string_view s) {
 #undef L_TYPE
 #undef S_TYPE
 #undef NUM_THREADS
+#undef INDUCE_NUM_THREADS
 
 } //namespace psais

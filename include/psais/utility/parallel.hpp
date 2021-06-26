@@ -64,7 +64,7 @@ void parallel_prefix_sum(
 
 	std::vector<T, boost::noinit_adaptor<std::allocator<T>>> block_prefix_sum(n_jobs);
 	std::vector<T> block_last_pos(n_threads, 0);
-	psais::utility::parallel_do(vec.size(), n_threads,
+	psais::utility::parallel_do(vec.size(), (size_t) n_threads,
 		[&](auto L, auto R, auto tid) {
 			if (L == R)
 				return ;
@@ -82,7 +82,7 @@ void parallel_prefix_sum(
 		block_prefix_sum[block_last_pos[i]] += block_prefix_sum[block_last_pos[i - 1]];
 	}
 
-	psais::utility::parallel_do(n_jobs, n_threads,
+	psais::utility::parallel_do(n_jobs, (size_t) n_threads,
 		[&](auto L, auto R, auto tid) {
 			if (L == R)
 				return ;

@@ -14,18 +14,14 @@ auto suffix_array(std::string_view s) {
 	return res;
 }
 
-int main(int argc, char**) {
+TEST(psais, suffix_array) {
 	using IndexType = uint32_t;
-	if (argc == 2) {
-		std::cout << "pid: " << getpid() << std::endl;
-		sleep(10);
-	}
 
 	auto len = 10000000;
 	auto gen = std::mt19937(std::random_device{}());
 	auto dis = std::uniform_int_distribution(0, 25);
 
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 5; i++) {
 		std::cout << i + 1 << '\n';
 
 		std::string str;
@@ -37,7 +33,7 @@ int main(int argc, char**) {
 		auto suf = psais::suffix_array<IndexType>(str);
 
 		for (int j = 0; j <= len; j++) {
-			assert(ans[j] == suf[j]);
+			ASSERT_EQ(ans[j], suf[j]);
 		}
 	}
 }

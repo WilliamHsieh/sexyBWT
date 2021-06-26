@@ -1,17 +1,13 @@
 CC = g++
 CCFLAG = -Iinclude -std=c++20 -Wall -Wextra -Wshadow -fopenmp -pthread -Ofast
 
-test-psais:
-	$(CC) $(CCFLAG) tests/psais/psais.cpp
+.PHONY: test
+
+test:
+	$(CC) $(CCFLAG) tests/main.cpp -lgtest -o test
 
 example-fasta:
-	$(CC) $(CCFLAG) example/fasta.cpp
-
-test-ThreadPool:
-	$(CC) $(CCFLAG) tests/psais/utility/thread_pool.cpp
-
-test-parallel:
-	$(CC) $(CCFLAG) tests/psais/utility/parallel.cpp
+	$(CC) $(CCFLAG) example/fasta.cpp -o psais
 
 clean:
-	rm -rf a.out
+	rm -f a.out test

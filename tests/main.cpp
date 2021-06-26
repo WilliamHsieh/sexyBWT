@@ -1,0 +1,9 @@
+#include <gtest/gtest.h>
+#include "psais/psais.cpp"
+#include "psais/utility/parallel.cpp"
+#include "psais/utility/thread_pool.cpp"
+
+int main(int argc, char **argv) {
+	testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
+}

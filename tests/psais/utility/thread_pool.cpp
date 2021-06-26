@@ -1,5 +1,4 @@
 #include <iostream>
-#include <cassert>
 #include <future>
 #include <random>
 #include <vector>
@@ -10,13 +9,6 @@ std::condition_variable cv;
 std::mutex cv_m;
 
 void print_1() {
-#ifdef debug
-	std::this_thread::sleep_for(std::chrono::seconds(1));
-#endif
-	auto gen = std::mt19937(std::random_device{}());
-	auto distrib = std::uniform_int_distribution(0, 9);
-	std::cout << (distrib(gen) & 1) << std::endl;
-
 	if (--num_job1 == 0) {
 		cv.notify_all();
 	}
@@ -27,10 +19,6 @@ struct print_2 {
 		std::unique_lock<std::mutex> lock(cv_m);
 		cv.wait(lock, []{ return num_job1 == 0; });
 		lock.unlock();
-#ifdef debug
-		std::this_thread::sleep_for(std::chrono::seconds(1));
-#endif
-		std::cout << 2 << std::endl;
 	}
 };
 
@@ -39,7 +27,7 @@ int fib(int n) {
 	return fib(n - 1) + fib(n - 2);
 }
 
-int main() {
+TEST(utility, thread_pool) {
 	auto pool = psais::utility::ThreadPool(5);
 	auto result = std::vector<std::future<void>>{};
 
@@ -55,16 +43,17 @@ int main() {
 	for (auto& r : result) {
 		r.get();
 	}
-	assert(num_job1 == 0);
+	ASSERT_EQ(num_job1, 0);
 
 	// different return type(int)
 	auto res = pool.enqueue(fib, 30);
-	std::cout << res.get() << std::endl;
+	res.wait();
 
 	// lambda
 	auto lam = [](int x, int y) { return x + y; };
 	auto res2 = pool.enqueue(lam, 3, 5);
-	std::cout << res2.get() << std::endl;
+	res2.wait();
 
-	return 0;
+	ASSERT_EQ(res.get(), fib(30));
+	ASSERT_EQ(res2.get(), 8);
 }

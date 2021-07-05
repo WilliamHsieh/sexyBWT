@@ -457,19 +457,19 @@ void using_omp(uint64_t threadResult[N_THREADS*N_KEYS], T local[N_THREADS], uint
     }
 }
 
-template<int N_HIST>
+template<int n_keys, int n_take>
 vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
 //    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
     int CNT_SIZE_N = pow(N_KEYS, DEPTH); 
     struct thread_cnt
     {
         vector <uint64_t> cnt;
-        thread_cnt() : cnt(N_HIST) {}
+        thread_cnt() : cnt((int)(pow(n_keys, n_take))) {}
     };
     vector<int> local;
-    uint64_t tempResult[N_THREADS*N_HIST];
-    uint64_t threadResult[N_THREADS*N_HIST];
-    uint64_t threadB[N_THREADS*N_HIST];
+    uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))];
     thread_cnt histogram_local[N_THREADS];
     thread_cnt histogram_global[N_THREADS];
     vector<uint64_t> sorted_index(seq.size(),0);

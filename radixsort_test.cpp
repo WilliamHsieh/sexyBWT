@@ -1,5 +1,5 @@
 #include <iostream>
-#include "radixsortv4.hpp"
+#include "radixsortv3.hpp"
 #include <cassert>
 #include <map>
 #include <chrono>
@@ -21,7 +21,7 @@ int main() {
     vector<int> seq = read_fasta_file("dataset/drosophila.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
 //    int n_keys = set<int>(seq.begin(), seq.end()).size();
     vector<uint64_t> idx = get_full_idx(seq);
-    uint64_t kmers = 21;
+    int kmers = 21;
  	cout << "Seq len: " << seq.size() << endl; // ", n-unique keys: "<< n_keys << endl;
     
  	// vector<uint64_t> my_vec(10, 0);
@@ -52,7 +52,7 @@ int main() {
  	// }
  	//call the API
  	ta = high_resolution_clock::now();
-    auto result = radix_sort(seq, idx, kmers);
+    auto result = radix_sort<25>(seq, idx, kmers);
     tb = high_resolution_clock::now();
 	ms_double = tb - ta;
 	cout<< "All: " << ms_double.count() << "ms" <<  endl;

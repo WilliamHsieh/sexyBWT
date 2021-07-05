@@ -13,14 +13,10 @@
 #include <cmath>
 #include <sstream>
 
-// #define N_KEYS 5
 #define N_THREADS 4
 #define DOLLAR 0
-#define DEPTH 2
-// #define CNT_SIZE 25//pow(N_KEYS, DEPTH)
 
 using namespace std;
-
 using namespace simdpp;
 using chrono::high_resolution_clock;
 using chrono::duration_cast;
@@ -73,7 +69,7 @@ vector<int> read_fasta_file(string path) {
 void print_sorted_idx(vector<uint64_t> &sorted_index, int k){
     cout << "SORTED INDEX, K-" << k << ": ";
     for (int i=0; i<sorted_index.size(); i++){
-       cout << sorted_index.at(i) << "; ";
+       cout << sorted_index[i] << "; ";
     }
     cout<<endl;
 }
@@ -90,46 +86,7 @@ void print_histogram(T (&histogram_local)[N_THREADS]){
 }
 
 
-vector<uint64_t> myvector;
-
-vector<uint64_t> printCombinations(int sampleCount, const std::vector<int>& options, std::vector<int>& numbersToPrint) {
-    if (numbersToPrint.size() == sampleCount) {
-        string el1, el2, el3;
-        int a = numbersToPrint.at(0);
-        for (int i = 1; i < numbersToPrint.size(); i++){
-            el1 = to_string(a);
-            int b = numbersToPrint.at(i);
-            el2 = to_string(b);
-            el3 = el1 + el2;
-            a = stoi(el3);
-        }
-        myvector.push_back(a);
-        return myvector;
-    }
-    else {
-        numbersToPrint.push_back(0);
-        for (int number : options) {
-            numbersToPrint.back() = number;
-            printCombinations(sampleCount, options, numbersToPrint);
-        }
-        numbersToPrint.pop_back();
-    }
-    return myvector;
-}
-
-
-vector<uint64_t> printCombinations(int sampleCount, const std::vector<int>& options)     {
-    std::vector<int> stack;
-    std::vector<uint64_t> myvector;
-    myvector = printCombinations(sampleCount, options, stack);
-    // cout << "CHECKKKKKKKK" << endl;
-    for (int i=0; i<myvector.size(); i++){
-        cout << myvector[i] << "; ";
-    }
-    return myvector;
-}
-
-template <typename T, int n_keys>
+template <typename T, int n_keys, int n_take>
 void key_counting_helper(uint64_t start, uint64_t end, int tid, T (&histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, int k){
     uint64_t temp1, temp2;
     uint64_t len = seq.size();
@@ -138,17 +95,17 @@ void key_counting_helper(uint64_t start, uint64_t end, int tid, T (&histogram)[N
     uint64_t b, index;
     std::vector<uint64_t>::iterator found;
     
-    uint64_t cnt[(int)(pow(n_keys, DEPTH))];
-    int cnt_size = (int)(pow(n_keys, DEPTH));
+    uint64_t cnt[(int)(pow(n_keys, n_take))];
+    int cnt_size = (int)(pow(n_keys, n_take));
     for(int i=0; i<cnt_size; i++) cnt[i]=0;
     
     for (uint64_t i=start; i<end; i++) {
-        index = 0; int power = DEPTH-1;
-        temp1 = idx.at(i)+k;
+        index = 0; int power = n_take-1;
+        temp1 = idx[i]+k;
         if(temp1<len){
-            temp2 = seq.at(temp1);
-            index += temp2*pow(DEPTH,power);          
-            for (int j=1; j < DEPTH; j++){
+            temp2 = seq[temp1];
+            index += temp2*pow(n_take,power);          
+            for (int j=1; j < n_take; j++){
                 power -= 1;
                 temp2 = seq[temp1+j];
                 index += temp2*pow(n_keys,power);
@@ -168,16 +125,13 @@ void key_counting_helper(uint64_t start, uint64_t end, int tid, T (&histogram)[N
     histogram[tid].cnt.assign(cnt, cnt + cnt_size);
 }
 
-template <typename T, int n_keys>
+template <typename T, int n_keys, int n_take>
 void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&histogram)[N_THREADS])
 {
     uint64_t len = idx.size();
     uint64_t n_elements = floor(len/N_THREADS);
     uint64_t n_remaining_elements = len%N_THREADS;
     for (int i=0; i<N_THREADS; i++) for(int j=0; j<n_keys; j++) histogram[i].cnt[j] = 0;
-    
-    
-    // myvector = printCombinations(DEPTH, arr);
     
     #pragma omp parallel num_threads(N_THREADS)
     {
@@ -187,7 +141,7 @@ void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&histog
         // #pragma omp critical
         // {if(k==1){cout<<"tid: "<< tid << ", start: " << start << ", end: " << end << endl;}}
         if(tid == 0) end += n_remaining_elements;
-        key_counting_helper<T, 5>(start, end, tid, histogram, seq, idx, k);
+        key_counting_helper<T, n_keys, n_take>(start, end, tid, histogram, seq, idx, k);
     }
 }
 
@@ -210,21 +164,21 @@ void old_style(uint64_t a[N_THREADS*n_keys], uint64_t b[N_THREADS*n_keys], uint6
         }
 }
 
-template <int n_keys>
-void simd_style(uint64_t a[N_THREADS*(int)(pow(n_keys, DEPTH))], uint64_t b[N_THREADS*(int)(pow(n_keys, DEPTH))], uint64_t c[N_THREADS*(int)(pow(n_keys, DEPTH))]){
-    int64<N_THREADS*(int)(pow(n_keys, DEPTH))> A = load(a);
-    int64<N_THREADS*(int)(pow(n_keys, DEPTH))> B = load(b);
-    int64<N_THREADS*(int)(pow(n_keys, DEPTH))> C = add(A, B);
+template <int n_keys, int n_take>
+void simd_style(uint64_t a[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t b[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t c[N_THREADS*(int)(pow(n_keys, n_take))]){
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(a);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(b);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> C = add(A, B);
     
     store(c, C);
     
 }
 
-template <typename T, int n_keys>
-void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_keys, DEPTH))], T local[(int)(pow(n_keys, DEPTH))], uint64_t tempResult[N_THREADS*(int)(pow(n_keys, DEPTH))], uint64_t threadB[N_THREADS*(int)(pow(n_keys, DEPTH))], T histogram[(int)(pow(n_keys, DEPTH))]){
+template <typename T, int n_keys, int n_take>
+void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))], T local[(int)(pow(n_keys, n_take))], uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))], T histogram[(int)(pow(n_keys, n_take))]){
     
-    uint64_t cnt[(int)(pow(n_keys, DEPTH))];
-    int cnt_size = (int)(pow(n_keys, DEPTH));
+    uint64_t cnt[(int)(pow(n_keys, n_take))];
+    int cnt_size = (int)(pow(n_keys, n_take));
     for (int th = 0; th < N_THREADS; ++th){
         int pos = 0;
         for (int iterator = 0; iterator < N_THREADS; ++iterator){
@@ -254,7 +208,7 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_key
         }
         else{
             if (SIMD == 1){
-                simd_style<n_keys>(threadResult, tempResult, threadB);
+                simd_style<n_keys, n_take>(threadResult, tempResult, threadB);
             }
             else{
                 old_style<n_keys>(threadResult, tempResult, threadB);
@@ -278,43 +232,40 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_key
     }
 }
 
-template <typename T, int n_keys>
+template <typename T, int n_keys, int n_take>
 void suffix_placement_helper(uint64_t start, uint64_t end, int tid, T (&global_histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, vector<uint64_t> &sorted_index, int k){
     
-    uint64_t n_placement[(int)(pow(n_keys, DEPTH))];
-    int cnt_size = (int)(pow(n_keys, DEPTH));
+    uint64_t n_placement[(int)(pow(n_keys, n_take))];
+    int cnt_size = (int)(pow(n_keys, n_take));
     for(int i=0; i<cnt_size; i++) n_placement[i]=0;
     uint64_t idx_i = 0; uint64_t len = seq.size();
     string s1, s2, s3;
     uint64_t b;
     int index, key = 0;
-    std::vector<uint64_t>::iterator found;
 
     for(uint64_t i = end; i > start; i--){
         idx_i = idx[i-1]+k;
         if(idx_i<len){
-            index = 0; int power = DEPTH-1;
+            index = 0; int power = n_take-1;
             key = seq[idx_i];   
             index += key*pow(n_keys,power);     
-            // cout << "idx 0: " + to_string(index) + "; key~power: " + to_string(key)+"~"+to_string(power)+"\n";
-            for (int j=1; j < DEPTH; j++){
+            for (int j=1; j < n_take; j++){
                 power -= 1;
                 key = seq[idx_i+j];
                 index += key*pow(n_keys,power);
-                // cout << "idx 1: " + to_string(index) + "; key~power: " + to_string(key)+"~"+to_string(power)+"\n";
             }
         }
         else{
             index = DOLLAR;
         }
-        sorted_index.at(global_histogram[tid].cnt[index]
-            - n_placement[index] - 1) = idx.at(i-1);
+        sorted_index[global_histogram[tid].cnt[index]
+            - n_placement[index] - 1] = idx[i-1];
         ++n_placement[index];        
     }
 
 }
 
-template <typename T, int n_keys>
+template <typename T, int n_keys, int n_take>
 void suffix_placement(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&global_histogram)[N_THREADS], vector<uint64_t> &sorted_index){
     uint64_t len = idx.size();
     uint64_t n_elements = floor(len/N_THREADS);
@@ -325,9 +276,7 @@ void suffix_placement(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&gl
         uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
         uint64_t end = start + n_elements;
         if(tid == 0) end += n_remaining_elements;
-        // #pragma omp critical
-        // {if(k==1){cout<<"tid: "<< tid << ", start: " << start << ", end: " << end << endl;}}
-        suffix_placement_helper<T, n_keys>(start, end, tid, global_histogram, seq, idx, sorted_index, k);
+        suffix_placement_helper<T, n_keys, n_take>(start, end, tid, global_histogram, seq, idx, sorted_index, k);
     }
 }
 
@@ -348,7 +297,7 @@ int * addition(uint64_t a[N_THREADS*n_keys]){
 }
 
 
-template <typename T, int n_keys>
+template <typename T, int n_keys, int n_take>
 void using_omp(uint64_t threadResult[N_THREADS*n_keys], T local[N_THREADS], uint64_t tempResult[N_THREADS*n_keys], uint64_t threadB[N_THREADS*n_keys], T (&histogram)[N_THREADS]){
     
     uint64_t cnt[n_keys];
@@ -380,7 +329,7 @@ void using_omp(uint64_t threadResult[N_THREADS*n_keys], T local[N_THREADS], uint
         for (int i = 0; i < n_keys; i++){
             cnt[i] = *(result+i);
         }
-        histogram[horizontal].cnt.assign(cnt, cnt + pow(n_keys, DEPTH));
+        histogram[horizontal].cnt.assign(cnt, cnt + pow(n_keys, n_take));
     }
 }
 
@@ -409,15 +358,15 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
         t1 = high_resolution_clock::now();
         if(k_idx%2==0){
             cout << "start" << endl;
-            key_counting<thread_cnt,n_keys>(seq, k, idx, histogram_local);
+            key_counting<thread_cnt,n_keys,n_take>(seq, k, idx, histogram_local);
             t2 = high_resolution_clock::now();
             ms_double = t2 - t1;
             cout<< "Step 1: " << ms_double.count() << "ms" <<  endl;
-            local2global_hist<thread_cnt,n_keys>(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
+            local2global_hist<thread_cnt,n_keys,n_take>(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
             t1 = high_resolution_clock::now();
             ms_double = t1 - t2;
             cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;
-            suffix_placement<thread_cnt,n_keys>(seq, k, idx, histogram_global, sorted_index);
+            suffix_placement<thread_cnt,n_keys,n_take>(seq, k, idx, histogram_global, sorted_index);
             t2 = high_resolution_clock::now();
             ms_double = t2 - t1;
             cout<< "Step 3: " << ms_double.count() << "ms" <<  endl;
@@ -425,15 +374,15 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
         }
         else{
             t1 = high_resolution_clock::now();
-            key_counting<thread_cnt,n_keys>(seq, k, sorted_index, histogram_local);
+            key_counting<thread_cnt,n_keys,n_take>(seq, k, sorted_index, histogram_local);
             t2 = high_resolution_clock::now();
             ms_double = t2 - t1;
             cout << "Step 1: " << ms_double.count() << "ms" <<  endl;
-            local2global_hist<thread_cnt,n_keys>(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
+            local2global_hist<thread_cnt,n_keys,n_take>(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
             t1 = high_resolution_clock::now();
             ms_double = t1 - t2;
             cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;
-            suffix_placement<thread_cnt,n_keys>(seq, k, sorted_index, histogram_global, idx);
+            suffix_placement<thread_cnt,n_keys,n_take>(seq, k, sorted_index, histogram_global, idx);
             t2 = high_resolution_clock::now();
             ms_double = t2 - t1;
             cout<< "Step 3: " << ms_double.count() << "ms" <<  endl;

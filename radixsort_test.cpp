@@ -19,10 +19,10 @@ int main() {
     auto tb = high_resolution_clock::now();
     duration<double, milli> ms_double;
 	//hardcode test
-    vector<int> seq = read_fasta_file("dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+    vector<int> seq = read_fasta_file("dataset/drosophila.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
 //    int n_keys = set<int>(seq.begin(), seq.end()).size();
     vector<uint64_t> idx = get_full_idx(seq);
-    int kmers = 5;
+    int kmers = 21;
  	cout << "Seq len: " << seq.size() << endl; // ", n-unique keys: "<< n_keys << endl;
     
  	// vector<uint64_t> my_vec(10, 0);

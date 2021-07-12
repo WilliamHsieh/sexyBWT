@@ -385,32 +385,47 @@ void induce_sort(
 // ##get_type
 template<typename IndexType, typename CharType>
 auto get_type(const NoInitVector<CharType> &S) {
-	IndexType n = S.size();
-	NoInitVector<uint8_t> T(n / 8 + 1);
+	NoInitVector<uint8_t> T(S.size() / 8 + 1);
 	std::vector<IndexType> same_char_suffix_len(NUM_THREADS, 0);
 	std::vector<IndexType> block_size(NUM_THREADS, 0);
 	std::vector<IndexType> block_left(NUM_THREADS, 0);
+
+	tset(T, S.size() - 1, S_TYPE);
+	IndexType rest = S.size() % 8;
+	IndexType n = S.size() / 8 * 8;
+
+	auto cal_type = [&](auto x) -> bool {
+		auto x1 = S[x], x2 = S[x + 1];
+		if (x1 < x2)
+			return S_TYPE;
+		else if (x1 > x2)
+			return L_TYPE;
+		else
+			return tget(T, x + 1);
+	};
+
+	if (rest != 0) {
+		for (IndexType i = rest - 2; ~i; i--) {
+			tset(T, n + i, cal_type(n + i));
+		}
+
+		if (n != 0)
+			tset(T, n - 1, cal_type(n - 1));
+	}
 
 	psais::utility::parallel_do(n, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType tid) {
 			if (L == R)
 				return ;
 
-			if (R == n or S[R - 1] < S[R])
-				T[R - 1] = S_TYPE;
-			else
-				T[R - 1] = L_TYPE;
+			if (R != n)
+				tset(T, R - 1, cal_type(R - 1));
 
 			same_char_suffix_len[tid] = 1;
 			bool same = true;
 			for (IndexType i = R - L - 2; ~i; i--) {
 				IndexType x = L + i;
-				if (S[x] < S[x + 1])
-					T[x] = S_TYPE;
-				else if (S[x] > S[x + 1])
-					T[x] = L_TYPE;
-				else
-					T[x] = T[x + 1];
+				tset(T, x, cal_type(x));
 
 				if (S[x] != S[x + 1])
 					same = false;
@@ -437,11 +452,11 @@ auto get_type(const NoInitVector<CharType> &S) {
 		if (S[x1] != S[x2])
 			continue;
 
-		uint8_t prev_left_type = T[x2];
+		uint8_t prev_left_type = tget(T, x2);
 		if (same_char_suffix_len[i + 1] == block_size[i + 1] and flip[i + 1])
 			prev_left_type ^= 1;
 
-		if (T[x1] != prev_left_type)
+		if (tget(T, x1) != prev_left_type)
 			flip[i] = true;
 	}
 
@@ -450,12 +465,12 @@ auto get_type(const NoInitVector<CharType> &S) {
 			if (not flip[tid])
 				return ;
 
-			T[R - 1] ^= 1;
+			tset(T, R - 1, !tget(T, R - 1));
 			for (IndexType i = R - L - 2; ~i; i--) {
 				IndexType x = L + i;
 				if (S[x] != S[x + 1])
 					return ;
-				T[x] ^= 1;
+				tset(T, x, !tget(T, x));
 			}
 		}
 	);

@@ -1,10 +1,4 @@
 #pragma once
-#define L_TYPE 0
-#define S_TYPE 1
-#define NUM_THREADS 32u
-#define INDUCE_NUM_THREADS 16u
-#define what_is(x) std::cout << '[' << #x << "]\n" << x << std::endl;
-
 #include <vector>
 #include <string>
 #include <array>
@@ -23,7 +17,14 @@
 // #pSAIS
 namespace psais {
 
+#define L_TYPE 0
+#define S_TYPE 1
+#define NUM_THREADS 32u
+#define INDUCE_NUM_THREADS 16u
+
 constexpr auto BLOCK_SIZE = 1u << 20;
+
+constexpr inline auto mask = std::array<uint8_t, 8>{0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
 
 template <typename T>
 using NoInitVector = std::vector<T, boost::noinit_adaptor<std::allocator<T>>>;
@@ -32,8 +33,16 @@ template <typename T>
 constexpr auto EMPTY = std::numeric_limits<T>::max();
 
 // #is_LMS
-inline bool is_LMS(auto &v, auto i) {
-	return i > 0 and v[i-1] == L_TYPE and v[i] == S_TYPE;
+bool tget(auto &T, auto idx) {
+	return T[idx >> 3] & mask[idx & 7];
+}
+
+void tset(auto &T, auto idx, bool val) {
+	T[idx >> 3] = val ? (mask[idx & 7] | T[idx >> 3]) : ((~mask[idx & 7]) & T[idx >> 3]);
+}
+
+bool is_LMS(auto &T, auto i) {
+	return i > 0 and tget(T, i-1) == L_TYPE and tget(T, i) == S_TYPE;
 }
 
 // #name_substr
@@ -187,7 +196,7 @@ void prepare(
 		if (SA[i] == EMPTY<IndexType> or SA[i] == 0) {
 			RB[i - L] = {EMPTY<CharType>, 0};
 		} else {
-			RB[i - L] = {S[induced_idx], T[induced_idx]};
+			RB[i - L] = {S[induced_idx], tget(T, induced_idx)};
 		}
 	}
 }
@@ -282,7 +291,7 @@ void induce (
 				auto chr = EMPTY<CharType>;
 				if (auto [c, t] = RBI[i - L]; c != EMPTY<CharType>) {
 					if (t == TYPE) chr = c;
-				} else if (T[induced_idx] == TYPE) {
+				} else if (tget(T, induced_idx) == TYPE) {
 					chr = S[induced_idx];
 				}
 
@@ -353,7 +362,7 @@ void induce_sort(
 		[&](IndexType L, IndexType R, IndexType) {
 			for (auto i = L; i < R; i++) {
 				if (i == 0 or SA[i] == EMPTY<IndexType>) continue;
-				if (T[SA[i]] == S_TYPE) {
+				if (tget(T, SA[i]) == S_TYPE) {
 					SA[i] = EMPTY<IndexType>;
 				}
 			}
@@ -377,7 +386,7 @@ void induce_sort(
 template<typename IndexType, typename CharType>
 auto get_type(const NoInitVector<CharType> &S) {
 	IndexType n = S.size();
-	NoInitVector<uint8_t> T(n);
+	NoInitVector<uint8_t> T(n / 8 + 1);
 	std::vector<IndexType> same_char_suffix_len(NUM_THREADS, 0);
 	std::vector<IndexType> block_size(NUM_THREADS, 0);
 	std::vector<IndexType> block_left(NUM_THREADS, 0);
@@ -489,8 +498,8 @@ auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
 
 // ##get_lms
 template<typename IndexType>
-auto get_lms(const NoInitVector<uint8_t> &T) {
-	return psais::utility::parallel_take_if<NoInitVector<IndexType>>(T.size(), NUM_THREADS,
+auto get_lms(const NoInitVector<uint8_t> &T, const auto size) {
+	return psais::utility::parallel_take_if<NoInitVector<IndexType>>(size, NUM_THREADS,
 		[&](IndexType i) { return is_LMS(T, i); },
 		[ ](IndexType i) { return i; }
 	);
@@ -504,7 +513,7 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 	auto BA = get_bucket(S, K);
 
 	// 2. induce LMS-substring
-	auto LMS = get_lms<IndexType>(T);
+	auto LMS = get_lms<IndexType>(T, S.size());
 
 	auto SA = NoInitVector<IndexType>(S.size());
 	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);

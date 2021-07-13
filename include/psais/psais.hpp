@@ -1,10 +1,4 @@
 #pragma once
-#define L_TYPE 0
-#define S_TYPE 1
-#define NUM_THREADS 32u
-#define INDUCE_NUM_THREADS 16u
-#define what_is(x) std::cout << '[' << #x << "]\n" << x << std::endl;
-
 #include <vector>
 #include <string>
 #include <array>
@@ -23,6 +17,11 @@
 // #pSAIS
 namespace psais {
 
+#define L_TYPE 0
+#define S_TYPE 1
+#define NUM_THREADS 32u
+#define INDUCE_NUM_THREADS 16u
+
 constexpr auto BLOCK_SIZE = 1u << 20;
 
 template <typename T>
@@ -31,28 +30,46 @@ using NoInitVector = std::vector<T, boost::noinit_adaptor<std::allocator<T>>>;
 template <typename T>
 constexpr auto EMPTY = std::numeric_limits<T>::max();
 
-// #is_LMS
-inline bool is_LMS(auto &v, auto i) {
-	return i > 0 and v[i-1] == L_TYPE and v[i] == S_TYPE;
-}
+// #TypeVector
+struct TypeVector {
+	TypeVector(std::unsigned_integral auto size) : T(size / 8 + 1) {}
+
+	bool get(auto idx) const {
+		return T[idx >> 3] & mask[idx & 7];
+	}
+
+	void set(auto idx, bool val) {
+		T[idx >> 3] = val
+			? (mask[idx & 7] | T[idx >> 3])
+			: ((~mask[idx & 7]) & T[idx >> 3]);
+	}
+
+	bool is_LMS(auto i) const {
+		return i > 0 and get(i - 1) == L_TYPE and get(i) == S_TYPE;
+	}
+
+  private:
+	NoInitVector<uint8_t> T;
+	static constexpr inline auto mask = std::array<uint8_t, 8>{0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+};
 
 // #name_substr
 template<typename IndexType, typename CharType>
 auto name_substr(
 	const NoInitVector<CharType> &S,
-	const NoInitVector<uint8_t> &T,
+	const TypeVector &T,
 	const NoInitVector<IndexType> &SA
 ) {
 	auto is_same_substr = [&S, &T] (auto x, auto y) {
 		do {
 			if (S[x++] != S[y++]) return false;
-		} while (!is_LMS(T, x) and !is_LMS(T, y));
-		return is_LMS(T, x) and is_LMS(T, y) and S[x] == S[y];
+		} while (!T.is_LMS(x) and !T.is_LMS(y));
+		return T.is_LMS(x) and T.is_LMS(y) and S[x] == S[y];
 	};
 
 	IndexType n = (IndexType)S.size();
 	auto SA1 = psais::utility::parallel_take_if<NoInitVector<IndexType>>(n, NUM_THREADS,
-		[&](IndexType i) { return is_LMS(T, SA[i]); },
+		[&](IndexType i) { return T.is_LMS(SA[i]); },
 		[&](IndexType i) { return SA[i]; }
 	);
 
@@ -174,7 +191,7 @@ void prepare(
 	const size_t L,
 	const NoInitVector<CharType> &S,
 	const NoInitVector<IndexType> &SA,
-	const NoInitVector<uint8_t> &T,
+	const TypeVector &T,
 	NoInitVector<std::pair<CharType, uint8_t>> &RB
 ) {
 	if (L >= SA.size()) return;
@@ -187,7 +204,7 @@ void prepare(
 		if (SA[i] == EMPTY<IndexType> or SA[i] == 0) {
 			RB[i - L] = {EMPTY<CharType>, 0};
 		} else {
-			RB[i - L] = {S[induced_idx], T[induced_idx]};
+			RB[i - L] = {S[induced_idx], T.get(induced_idx)};
 		}
 	}
 }
@@ -212,10 +229,10 @@ void update(
 }
 
 // ##induce
-template<auto TYPE, typename IndexType, typename CharType>
+template<auto InduceType, typename IndexType, typename CharType>
 void induce (
 	const NoInitVector<CharType> &S,
-	const NoInitVector<uint8_t> &T,
+	const TypeVector &T,
 	NoInitVector<IndexType> &SA,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBP,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBI,
@@ -227,7 +244,7 @@ void induce (
 	std::vector<std::jthread> stage;
 
 	auto is_adjacent = [BLOCK_SIZE = BLOCK_SIZE](auto pos, auto L) {
-		if constexpr (TYPE == L_TYPE) {
+		if constexpr (InduceType == L_TYPE) {
 			return pos < L + (BLOCK_SIZE << 1);
 		} else {
 			return pos + BLOCK_SIZE >= L;
@@ -236,7 +253,7 @@ void induce (
 
 	// views
 	constexpr auto block_view = [] {
-		if constexpr (TYPE == L_TYPE) {
+		if constexpr (InduceType == L_TYPE) {
 			return std::views::all;
 		} else {
 			return std::views::reverse;
@@ -249,7 +266,7 @@ void induce (
 		);
 
 	// prepare for first block
-	if constexpr (TYPE == L_TYPE) {
+	if constexpr (InduceType == L_TYPE) {
 		prepare(0, S, SA, T, RBP);
 	} else {
 		prepare(size / BLOCK_SIZE * BLOCK_SIZE, S, SA, T, RBP);
@@ -264,7 +281,7 @@ void induce (
 		// prepare && update
 		IndexType P_L = L + BLOCK_SIZE;
 		IndexType U_L = L - BLOCK_SIZE;
-		if constexpr (TYPE == S_TYPE) {
+		if constexpr (InduceType == S_TYPE) {
 			std::swap(P_L, U_L);
 		}
 
@@ -281,15 +298,15 @@ void induce (
 			if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
 				auto chr = EMPTY<CharType>;
 				if (auto [c, t] = RBI[i - L]; c != EMPTY<CharType>) {
-					if (t == TYPE) chr = c;
-				} else if (T[induced_idx] == TYPE) {
+					if (t == InduceType) chr = c;
+				} else if (T.get(induced_idx) == InduceType) {
 					chr = S[induced_idx];
 				}
 
 				if (chr == EMPTY<CharType>) continue;
 
 				auto pos = ptr[chr];
-				if constexpr (TYPE == L_TYPE) {
+				if constexpr (InduceType == L_TYPE) {
 					ptr[chr] += 1;
 				} else {
 					ptr[chr] -= 1;
@@ -312,7 +329,7 @@ void induce (
 template<typename IndexType, typename CharType>
 void induce_sort(
 	const NoInitVector<CharType> &S,
-	const NoInitVector<uint8_t> &T,
+	const TypeVector &T,
 	const NoInitVector<IndexType> &SA1,
 	const NoInitVector<IndexType> &LMS,
 	NoInitVector<IndexType> &BA,
@@ -353,7 +370,7 @@ void induce_sort(
 		[&](IndexType L, IndexType R, IndexType) {
 			for (auto i = L; i < R; i++) {
 				if (i == 0 or SA[i] == EMPTY<IndexType>) continue;
-				if (T[SA[i]] == S_TYPE) {
+				if (T.get(SA[i]) == S_TYPE) {
 					SA[i] = EMPTY<IndexType>;
 				}
 			}
@@ -376,32 +393,47 @@ void induce_sort(
 // ##get_type
 template<typename IndexType, typename CharType>
 auto get_type(const NoInitVector<CharType> &S) {
-	IndexType n = S.size();
-	NoInitVector<uint8_t> T(n);
+	auto T = TypeVector(S.size());
 	std::vector<IndexType> same_char_suffix_len(NUM_THREADS, 0);
 	std::vector<IndexType> block_size(NUM_THREADS, 0);
 	std::vector<IndexType> block_left(NUM_THREADS, 0);
+
+	T.set(S.size() - 1, S_TYPE);
+	IndexType rest = S.size() % 8;
+	IndexType n = S.size() / 8 * 8;
+
+	auto cal_type = [&](auto x) -> bool {
+		auto x1 = S[x], x2 = S[x + 1];
+		if (x1 < x2)
+			return S_TYPE;
+		else if (x1 > x2)
+			return L_TYPE;
+		else
+			return T.get(x + 1);
+	};
+
+	if (rest != 0) {
+		for (IndexType i = rest - 2; ~i; i--) {
+			T.set(n + i, cal_type(n + i));
+		}
+
+		if (n != 0)
+			T.set(n - 1, cal_type(n - 1));
+	}
 
 	psais::utility::parallel_do(n, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType tid) {
 			if (L == R)
 				return ;
 
-			if (R == n or S[R - 1] < S[R])
-				T[R - 1] = S_TYPE;
-			else
-				T[R - 1] = L_TYPE;
+			if (R != n)
+				T.set(R - 1, cal_type(R - 1));
 
 			same_char_suffix_len[tid] = 1;
 			bool same = true;
 			for (IndexType i = R - L - 2; ~i; i--) {
 				IndexType x = L + i;
-				if (S[x] < S[x + 1])
-					T[x] = S_TYPE;
-				else if (S[x] > S[x + 1])
-					T[x] = L_TYPE;
-				else
-					T[x] = T[x + 1];
+				T.set(x, cal_type(x));
 
 				if (S[x] != S[x + 1])
 					same = false;
@@ -428,11 +460,11 @@ auto get_type(const NoInitVector<CharType> &S) {
 		if (S[x1] != S[x2])
 			continue;
 
-		uint8_t prev_left_type = T[x2];
+		uint8_t prev_left_type = T.get(x2);
 		if (same_char_suffix_len[i + 1] == block_size[i + 1] and flip[i + 1])
 			prev_left_type ^= 1;
 
-		if (T[x1] != prev_left_type)
+		if (T.get(x1) != prev_left_type)
 			flip[i] = true;
 	}
 
@@ -441,12 +473,12 @@ auto get_type(const NoInitVector<CharType> &S) {
 			if (not flip[tid])
 				return ;
 
-			T[R - 1] ^= 1;
+			T.set(R - 1, !T.get(R - 1));
 			for (IndexType i = R - L - 2; ~i; i--) {
 				IndexType x = L + i;
 				if (S[x] != S[x + 1])
 					return ;
-				T[x] ^= 1;
+				T.set(x, !T.get(x));
 			}
 		}
 	);
@@ -489,9 +521,9 @@ auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
 
 // ##get_lms
 template<typename IndexType>
-auto get_lms(const NoInitVector<uint8_t> &T) {
-	return psais::utility::parallel_take_if<NoInitVector<IndexType>>(T.size(), NUM_THREADS,
-		[&](IndexType i) { return is_LMS(T, i); },
+auto get_lms(const TypeVector &T, const auto size) {
+	return psais::utility::parallel_take_if<NoInitVector<IndexType>>(size, NUM_THREADS,
+		[&](IndexType i) { return T.is_LMS(i); },
 		[ ](IndexType i) { return i; }
 	);
 }
@@ -504,7 +536,7 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 	auto BA = get_bucket(S, K);
 
 	// 2. induce LMS-substring
-	auto LMS = get_lms<IndexType>(T);
+	auto LMS = get_lms<IndexType>(T, S.size());
 
 	auto SA = NoInitVector<IndexType>(S.size());
 	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);

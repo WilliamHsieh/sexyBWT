@@ -5,16 +5,16 @@
 #include "psais/psais.hpp"
 
 template<typename IndexType>
-auto suffix_array(std::string_view s) {
+auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
 	auto res = std::vector<IndexType>(s.size() + 1);
 	std::iota(res.begin(), res.end(), 0);
-	std::sort(res.begin(), res.end(), [s](IndexType a, IndexType b) {
-		return s.substr(a) < s.substr(b);
+	std::sort(res.begin(), res.end(), [s, kmer](IndexType a, IndexType b) {
+		return s.substr(a, kmer) < s.substr(b, kmer);
 	});
 	return res;
 }
 
-TEST(psais, suffix_array) {
+void job(size_t kmer) {
 	using IndexType = uint32_t;
 
 	auto len = 10000000;
@@ -29,11 +29,19 @@ TEST(psais, suffix_array) {
 			str += 'a' + dis(gen);
 		}
 
-		auto ans = suffix_array<IndexType>(str);
-		auto suf = psais::suffix_array<IndexType>(str);
+		auto ans = suffix_array<IndexType>(str, kmer);
+		auto suf = psais::suffix_array<IndexType>(str, kmer);
 
 		for (int j = 0; j <= len; j++) {
 			ASSERT_EQ(ans[j], suf[j]);
 		}
 	}
+}
+
+TEST(psais, suffix_array) {
+	job(std::string::npos);
+}
+
+TEST(psais, korder_suffix_array) {
+	job(16);
 }

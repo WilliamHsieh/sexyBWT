@@ -1,3 +1,5 @@
+#define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
+
 #include <bits/stdc++.h>
 #include "psais/psais.hpp"
 

@@ -368,7 +368,7 @@ void induce_sort(
 	induce<L_TYPE>(S, T, SA, RBP, RBI, WBU, WBI, ptr);
 
 	// init buffer
-  psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
+	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
 	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
 	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
 	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
@@ -378,7 +378,7 @@ void induce_sort(
 		[&](IndexType L, IndexType R, IndexType) {
 			for (auto i = L; i < R; i++) {
 				if (i == 0 or SA[i] == EMPTY<IndexType>) continue;
-				if (tget(T, SA[i]) == S_TYPE) {
+				if (T.get(SA[i]) == S_TYPE) {
 					SA[i] = EMPTY<IndexType>;
 				}
 			}

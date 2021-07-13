@@ -14,8 +14,8 @@
 #include "psais/utility/parallel.hpp"
 #include "psais/utility/thread_pool.hpp"
 
-// #pSAIS
-namespace psais {
+// #pSAIS::detail
+namespace psais::detail {
 
 #define L_TYPE 0
 #define S_TYPE 1
@@ -579,6 +579,11 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 	return SA;
 }
 
+} // namespace psais::detail
+
+// #pSAIS
+namespace psais {
+
 template <typename IndexType>
 auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
 	IndexType K = 0;
@@ -586,7 +591,7 @@ auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
 	for (auto c : s) idx[c] = 1;
 	for (auto &x : idx) if(x) x = ++K;
 
-	auto res = NoInitVector<uint8_t>(s.size() + 1);
+	auto res = psais::detail::NoInitVector<uint8_t>(s.size() + 1);
 	psais::utility::parallel_do(s.size(), NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = L; i < R; i++)
@@ -595,7 +600,7 @@ auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
 	);
 	res[s.size()] = 0;
 
-	return suffix_array(res, K, kmer);
+	return psais::detail::suffix_array(res, K, kmer);
 }
 
 #undef L_TYPE

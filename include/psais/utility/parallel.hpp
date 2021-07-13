@@ -40,19 +40,10 @@ void parallel_do (
 }
 
 // #parallel_init
-template <typename Vec, typename Val>
-void parallel_init (
-	std::integral auto n_jobs,
-	std::integral auto n_threads,
-	Vec&& container,
-	Val&& value
-) {
-	parallel_do(n_jobs, n_threads,
-		[](auto L, auto R, auto, Vec& v, auto&& x) {
-			for (auto i = L; i < R; i++) {
-				v[i] = x;
-			}
-		}, std::forward<Vec>(container), std::forward<Val>(value)
+template <std::ranges::input_range R>
+void parallel_init(R&& r, const auto& value) {
+	std::for_each(std::execution::par, r.begin(), r.end(),
+		[&value](auto &x) { x = value; }
 	);
 }
 

@@ -1,3 +1,5 @@
+#define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
+
 #include <gtest/gtest.h>
 #include "psais/psais.cpp"
 #include "psais/utility/parallel.cpp"

@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <future>
 #include <ranges>
+#include <execution>
 #include <omp.h>
 
 #include <boost/core/noinit_adaptor.hpp>
@@ -14,8 +15,8 @@
 #include "psais/utility/parallel.hpp"
 #include "psais/utility/thread_pool.hpp"
 
-// #pSAIS
-namespace psais {
+// #pSAIS::detail
+namespace psais::detail {
 
 #define L_TYPE 0
 #define S_TYPE 1
@@ -68,11 +69,8 @@ auto name_substr(
 			k--;
 			if (S[x++] != S[y++]) return false;
 		} while (!T.is_LMS(x) and !T.is_LMS(y) and k);
-    
-		if (k == 0)
-			return false;
-      
-		return T.is_LMS(x) and T.is_LMS(y) and S[x] == S[y];
+
+		return k and T.is_LMS(x) and T.is_LMS(y) and S[x] == S[y];
 	};
 
 	IndexType n = (IndexType)S.size();
@@ -84,7 +82,7 @@ auto name_substr(
 	IndexType n1 = (IndexType)SA1.size();
 
 	auto is_same = NoInitVector<IndexType>(n1);
-	psais::utility::parallel_init(n1, NUM_THREADS, is_same, 0);
+	psais::utility::parallel_init(is_same, 0);
 
 	{
 		auto result = std::vector<std::future<void>>{};
@@ -111,7 +109,7 @@ auto name_substr(
 	psais::utility::parallel_prefix_sum(is_same, NUM_THREADS);
 
 	NoInitVector<IndexType> name(n);
-	psais::utility::parallel_init(n, NUM_THREADS, name, EMPTY<IndexType>);
+	psais::utility::parallel_init(name, EMPTY<IndexType>);
 
 	psais::utility::parallel_do(n1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
@@ -144,11 +142,8 @@ auto put_lms(
 	IndexType K = (IndexType)BA.size() - 1;
 
 	NoInitVector<IndexType> S1(n1);
-	psais::utility::parallel_do(n1, NUM_THREADS,
-		[&](IndexType L, IndexType R, IndexType) {
-			for (IndexType i = L; i < R; i++)
-				S1[i] = LMS[SA1[i]];
-		}
+	std::transform(std::execution::par_unseq, SA1.begin(), SA1.end(), S1.begin(),
+		[&LMS](auto &x) { return LMS[x]; }
 	);
 
 	NoInitVector<IndexType> local_BA(1ull * (K + 1) * NUM_THREADS);
@@ -352,46 +347,36 @@ void induce_sort(
 	NoInitVector<std::pair<IndexType, IndexType>> WBU(BLOCK_SIZE), WBI(BLOCK_SIZE);
 
 	// init buffer
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+	psais::utility::parallel_init(RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
+	psais::utility::parallel_init(RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
+	psais::utility::parallel_init(WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+	psais::utility::parallel_init(WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
 
 	// induce L
-	psais::utility::parallel_do(ptr.size(), NUM_THREADS,
-		[&](IndexType L, IndexType R, IndexType) {
-			for (auto i = L; i < R; i++) {
-				ptr[i] = (i == 0) ? 0 : BA[i - 1];
-			}
-		}
+	ptr[0] = 0;
+	std::transform(std::execution::par_unseq, BA.begin(), BA.end() - 1, ptr.begin() + 1,
+		[](IndexType &b) { return b; }
 	);
 	induce<L_TYPE>(S, T, SA, RBP, RBI, WBU, WBI, ptr);
 
 	// init buffer
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
-	psais::utility::parallel_init(BLOCK_SIZE, NUM_THREADS, WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+	psais::utility::parallel_init(RBP, std::pair{EMPTY<CharType>, uint8_t(0)});
+	psais::utility::parallel_init(RBI, std::pair{EMPTY<CharType>, uint8_t(0)});
+	psais::utility::parallel_init(WBU, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
+	psais::utility::parallel_init(WBI, std::pair{EMPTY<IndexType>, EMPTY<IndexType>});
 
 	// clean S_TYPE
-	psais::utility::parallel_do(SA.size(), NUM_THREADS,
-		[&](IndexType L, IndexType R, IndexType) {
-			for (auto i = L; i < R; i++) {
-				if (i == 0 or SA[i] == EMPTY<IndexType>) continue;
-				if (T.get(SA[i]) == S_TYPE) {
-					SA[i] = EMPTY<IndexType>;
-				}
+	std::for_each(std::execution::par_unseq, SA.begin() + 1, SA.end(),
+		[&T](IndexType &idx) {
+			if (idx != EMPTY<IndexType> and T.get(idx) == S_TYPE) {
+				idx = EMPTY<IndexType>;
 			}
 		}
 	);
 
 	// induce S
-	psais::utility::parallel_do(ptr.size(), NUM_THREADS,
-		[&](IndexType L, IndexType R, IndexType) {
-			for (auto i = L; i < R; i++) {
-				ptr[i] = BA[i] - 1;
-			}
-		}
+	std::transform(std::execution::par_unseq, BA.begin(), BA.end(), ptr.begin(),
+		[](auto &bucket) { return bucket - 1; }
 	);
 	induce<S_TYPE>(S, T, SA, RBP, RBI, WBU, WBI, ptr);
 }
@@ -498,7 +483,7 @@ auto get_type(const NoInitVector<CharType> &S) {
 template<typename IndexType, typename CharType>
 auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
 	NoInitVector<IndexType> local_BA(1ull * (K + 1) * NUM_THREADS);
-	psais::utility::parallel_init(local_BA.size(), NUM_THREADS, local_BA, 0);
+	psais::utility::parallel_init(local_BA, 0);
 
 	IndexType n = S.size();
 	psais::utility::parallel_do(n, NUM_THREADS,
@@ -510,7 +495,7 @@ auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
 	);
 
 	auto BA = NoInitVector<IndexType>(K + 1);
-	psais::utility::parallel_init(K + 1, NUM_THREADS, BA, 0);
+	psais::utility::parallel_init(BA, 0);
 
 	psais::utility::parallel_do(K + 1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
@@ -547,16 +532,14 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 	auto LMS = get_lms<IndexType>(T, S.size());
 
 	auto SA = NoInitVector<IndexType>(S.size());
-	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);
+	psais::utility::parallel_init(SA, EMPTY<IndexType>);
 
 	auto SA1 = NoInitVector<IndexType>(LMS.size());
 
 	// iota SA1
-	psais::utility::parallel_do(SA1.size(), NUM_THREADS,
-		[&SA1](IndexType L, IndexType R, IndexType) {
-			for (IndexType i = L; i < R; i++)
-				SA1[i] = i;
-		}
+	auto iota = std::views::iota(IndexType(0), static_cast<IndexType>(SA1.size()));
+	std::transform(std::execution::par_unseq, iota.begin(), iota.end(), SA1.begin(),
+		[](auto &idx) { return idx; }
 	);
 
 	induce_sort(S, T, SA1, LMS, BA, SA);
@@ -573,11 +556,21 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 	}
 
 	// 4. induce orig SA
-	psais::utility::parallel_init(SA.size(), NUM_THREADS, SA, EMPTY<IndexType>);
+	psais::utility::parallel_init(SA, EMPTY<IndexType>);
 	induce_sort(S, T, SA1, LMS, BA, SA);
 
 	return SA;
 }
+
+#undef L_TYPE
+#undef S_TYPE
+#undef NUM_THREADS
+#undef INDUCE_NUM_THREADS
+
+} // namespace psais::detail
+
+// #pSAIS
+namespace psais {
 
 template <typename IndexType>
 auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
@@ -586,21 +579,13 @@ auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
 	for (auto c : s) idx[c] = 1;
 	for (auto &x : idx) if(x) x = ++K;
 
-	auto res = NoInitVector<uint8_t>(s.size() + 1);
-	psais::utility::parallel_do(s.size(), NUM_THREADS,
-		[&](IndexType L, IndexType R, IndexType) {
-			for (IndexType i = L; i < R; i++)
-				res[i] = idx[s[i]];
-		}
+	auto res = psais::detail::NoInitVector<uint8_t>(s.size() + 1);
+	std::transform(std::execution::par_unseq, s.begin(), s.end(), res.begin(),
+		[&idx](auto &c) { return idx[c]; }
 	);
 	res[s.size()] = 0;
 
-	return suffix_array(res, K, kmer);
+	return psais::detail::suffix_array(res, K, kmer);
 }
-
-#undef L_TYPE
-#undef S_TYPE
-#undef NUM_THREADS
-#undef INDUCE_NUM_THREADS
 
 } //namespace psais

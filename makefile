@@ -1,7 +1,7 @@
 CC = g++
-CCFLAG = -Iinclude -std=c++20 -Wall -Wextra -Wshadow -fopenmp -pthread -Ofast
+CCFLAG = -Iinclude -std=c++20 -Wall -Wextra -Wshadow -fopenmp -pthread -Ofast -ltbb
 
-.PHONY: test
+.PHONY: test psais
 
 test: tests/main.cpp
 	$(CC) $(CCFLAG) $^ -lgtest -o $@

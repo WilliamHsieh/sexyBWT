@@ -1,17 +1,20 @@
 #include <iostream>
 #include <algorithm>
 #include <random>
-#include <cassert>
+#include <execution>
 #include "psais/psais.hpp"
 
 template<typename IndexType>
-auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
-	auto res = std::vector<IndexType>(s.size() + 1);
-	std::iota(res.begin(), res.end(), 0);
-	std::sort(res.begin(), res.end(), [s, kmer](IndexType a, IndexType b) {
-		return s.substr(a, kmer) < s.substr(b, kmer);
-	});
-	return res;
+auto suffix_array(std::string_view ref, size_t kmer = std::string::npos) {
+	auto sa = std::vector<IndexType>(ref.size() + 1);
+	std::iota(sa.begin(), sa.end(), 0);
+
+	std::stable_sort(std::execution::par_unseq, sa.begin(), sa.end(),
+		[ref, kmer] (IndexType a, IndexType b) {
+			return ref.substr(a, kmer) < ref.substr(b, kmer);
+		}
+	);
+	return sa;
 }
 
 void job(size_t kmer) {

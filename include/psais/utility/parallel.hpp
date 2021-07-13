@@ -3,8 +3,8 @@
 #include <thread>
 #include <boost/core/noinit_adaptor.hpp>
 
-// #utility
-namespace psais::utility {
+// #psais::detail
+namespace psais::detail {
 
 template<typename T>
 std::reference_wrapper<std::remove_reference_t<T>> wrapper(T& t) { return std::ref(t); }
@@ -12,7 +12,11 @@ std::reference_wrapper<std::remove_reference_t<T>> wrapper(T& t) { return std::r
 template<typename T>
 T&& wrapper(std::remove_reference_t<T>&& t) { return std::move(t); }
 
+} //namespace psais::detail
+
 // #parallel_do
+namespace psais::utility {
+
 template <typename Func, typename ... Args>
 void parallel_do (
 	std::integral auto n_jobs,
@@ -30,25 +34,16 @@ void parallel_do (
 		if (block_size == 0) break;
 
 		auto R = std::min(n_jobs, L + block_size);
-		threads.emplace_back(std::forward<Func>(func), L, R, tid, wrapper<Args>(args)...);
+		threads.emplace_back(std::forward<Func>(func), L, R, tid, psais::detail::wrapper<Args>(args)...);
 		L = R;
 	}
 }
 
 // #parallel_init
-template <typename Vec, typename Val>
-void parallel_init (
-	std::integral auto n_jobs,
-	std::integral auto n_threads,
-	Vec&& container,
-	Val&& value
-) {
-	parallel_do(n_jobs, n_threads,
-		[](auto L, auto R, auto, Vec& v, auto&& x) {
-			for (auto i = L; i < R; i++) {
-				v[i] = x;
-			}
-		}, std::forward<Vec>(container), std::forward<Val>(value)
+template <std::ranges::input_range R>
+void parallel_init(R&& r, const auto& value) {
+	std::for_each(std::execution::par, r.begin(), r.end(),
+		[&value](auto &x) { x = value; }
 	);
 }
 

@@ -7,7 +7,7 @@
 
 TEST(utility, parallel_init) {
 	auto v = std::vector<int>(JOBS);
-	psais::utility::parallel_init((int)v.size(), 32, v, 5);
+	psais::utility::parallel_init(v, 5);
 	for (auto x : v) {
 		ASSERT_EQ(x, 5);
 	}
@@ -21,7 +21,7 @@ TEST(utility, parallel_do) {
 		auto beg = std::chrono::high_resolution_clock::now();
 
 		// initialize
-		psais::utility::parallel_init(n_jobs, n_threads, v, 5);
+		psais::utility::parallel_init(v, 5);
 
 		// process
 		psais::utility::parallel_do(n_jobs, n_threads,

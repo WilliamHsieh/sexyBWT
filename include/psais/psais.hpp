@@ -221,7 +221,7 @@ void update(
 }
 
 // ##induce
-template<auto TYPE, typename IndexType, typename CharType>
+template<auto InduceType, typename IndexType, typename CharType>
 void induce (
 	const NoInitVector<CharType> &S,
 	const NoInitVector<uint8_t> &T,
@@ -236,7 +236,7 @@ void induce (
 	std::vector<std::jthread> stage;
 
 	auto is_adjacent = [BLOCK_SIZE = BLOCK_SIZE](auto pos, auto L) {
-		if constexpr (TYPE == L_TYPE) {
+		if constexpr (InduceType == L_TYPE) {
 			return pos < L + (BLOCK_SIZE << 1);
 		} else {
 			return pos + BLOCK_SIZE >= L;
@@ -245,7 +245,7 @@ void induce (
 
 	// views
 	constexpr auto block_view = [] {
-		if constexpr (TYPE == L_TYPE) {
+		if constexpr (InduceType == L_TYPE) {
 			return std::views::all;
 		} else {
 			return std::views::reverse;
@@ -258,7 +258,7 @@ void induce (
 		);
 
 	// prepare for first block
-	if constexpr (TYPE == L_TYPE) {
+	if constexpr (InduceType == L_TYPE) {
 		prepare(0, S, SA, T, RBP);
 	} else {
 		prepare(size / BLOCK_SIZE * BLOCK_SIZE, S, SA, T, RBP);
@@ -273,7 +273,7 @@ void induce (
 		// prepare && update
 		IndexType P_L = L + BLOCK_SIZE;
 		IndexType U_L = L - BLOCK_SIZE;
-		if constexpr (TYPE == S_TYPE) {
+		if constexpr (InduceType == S_TYPE) {
 			std::swap(P_L, U_L);
 		}
 
@@ -290,15 +290,15 @@ void induce (
 			if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
 				auto chr = EMPTY<CharType>;
 				if (auto [c, t] = RBI[i - L]; c != EMPTY<CharType>) {
-					if (t == TYPE) chr = c;
-				} else if (tget(T, induced_idx) == TYPE) {
+					if (t == InduceType) chr = c;
+				} else if (tget(T, induced_idx) == InduceType) {
 					chr = S[induced_idx];
 				}
 
 				if (chr == EMPTY<CharType>) continue;
 
 				auto pos = ptr[chr];
-				if constexpr (TYPE == L_TYPE) {
+				if constexpr (InduceType == L_TYPE) {
 					ptr[chr] += 1;
 				} else {
 					ptr[chr] -= 1;

@@ -231,6 +231,53 @@ void update(
 	}
 }
 
+// ##induce_impl
+template<auto InduceType, typename IndexType, typename CharType>
+void induce_impl (
+	const NoInitVector<CharType> &S,
+	const TypeVector &T,
+	const std::ranges::input_range auto &rng,
+	const IndexType L,
+	NoInitVector<IndexType> &SA,
+	NoInitVector<std::pair<CharType, uint8_t>> &RB,
+	NoInitVector<std::pair<IndexType, IndexType>> &WB,
+	NoInitVector<IndexType> &ptr
+) {
+	for (IndexType i : rng) {
+		auto induced_idx = SA[i] - 1;
+
+		if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
+			auto chr = EMPTY<CharType>;
+			if (auto [c, t] = RB[i - L]; c != EMPTY<CharType>) {
+				if (t == InduceType) chr = c;
+			} else if (T.get(induced_idx) == InduceType) {
+				chr = S[induced_idx];
+			}
+
+			if (chr == EMPTY<CharType>) continue;
+
+			bool is_adjacent;
+			auto pos = ptr[chr];
+			if constexpr (InduceType == L_TYPE) {
+				ptr[chr] += 1;
+				is_adjacent = pos < L + (BLOCK_SIZE << 1);
+			} else {
+				ptr[chr] -= 1;
+				is_adjacent = pos + BLOCK_SIZE >= L;
+			}
+
+			// if pos is in adjacent block -> directly write it
+			// otherwise, write it to WB
+			if (is_adjacent) {
+				SA[pos] = induced_idx;
+				WB[i - L].first = EMPTY<IndexType>;
+			} else {
+				WB[i - L] = {pos, induced_idx};
+			}
+		}
+	}
+}
+
 // ##induce
 template<auto InduceType, typename IndexType, typename CharType>
 void induce (
@@ -246,16 +293,8 @@ void induce (
 	IndexType size = SA.size();
 	std::vector<std::jthread> stage;
 
-	auto is_adjacent = [BLOCK_SIZE = BLOCK_SIZE](auto pos, auto L) {
-		if constexpr (InduceType == L_TYPE) {
-			return pos < L + (BLOCK_SIZE << 1);
-		} else {
-			return pos + BLOCK_SIZE >= L;
-		}
-	};
-
 	// views
-	constexpr auto block_view = [] {
+	constexpr auto iter_view = [] {
 		if constexpr (InduceType == L_TYPE) {
 			return std::views::all;
 		} else {
@@ -263,10 +302,8 @@ void induce (
 		}
 	}();
 
-	auto block = std::views::iota(IndexType(0), size)
-		| std::views::filter (
-			[BLOCK_SIZE = BLOCK_SIZE](IndexType n) { return n % BLOCK_SIZE == 0; }
-		);
+	auto blocks = std::views::iota(IndexType(0), size)
+		| std::views::filter([](IndexType n) { return n % BLOCK_SIZE == 0; });
 
 	// prepare for first block
 	if constexpr (InduceType == L_TYPE) {
@@ -276,7 +313,7 @@ void induce (
 	}
 
 	// pipeline
-	for (IndexType L : block | block_view) {
+	for (IndexType L : blocks | iter_view) {
 		stage.clear();
 		RBI.swap(RBP);
 		WBI.swap(WBU);
@@ -294,37 +331,8 @@ void induce (
 				std::ref(WBU), std::ref(SA));
 
 		// induce
-		auto R = std::min(L + BLOCK_SIZE, size);
-		for (IndexType i : std::views::iota(L, R) | block_view) {
-			auto induced_idx = SA[i] - 1;
-
-			if (SA[i] != EMPTY<IndexType> and SA[i] != 0) {
-				auto chr = EMPTY<CharType>;
-				if (auto [c, t] = RBI[i - L]; c != EMPTY<CharType>) {
-					if (t == InduceType) chr = c;
-				} else if (T.get(induced_idx) == InduceType) {
-					chr = S[induced_idx];
-				}
-
-				if (chr == EMPTY<CharType>) continue;
-
-				auto pos = ptr[chr];
-				if constexpr (InduceType == L_TYPE) {
-					ptr[chr] += 1;
-				} else {
-					ptr[chr] -= 1;
-				}
-
-				// if pos is in adjacent block -> directly write it
-				// otherwise, write it to WB
-				if (is_adjacent(pos, L)) {
-					SA[pos] = induced_idx;
-					WBI[i - L].first = EMPTY<IndexType>;
-				} else {
-					WBI[i - L] = {pos, induced_idx};
-				}
-			}
-		}
+		auto rng = std::views::iota(L, std::min(L + BLOCK_SIZE, size)) | iter_view;
+		induce_impl<InduceType>(S, T, rng, L, SA, RBI, WBI, ptr);
 	}
 }
 

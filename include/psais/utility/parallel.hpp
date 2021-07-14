@@ -91,10 +91,11 @@ void parallel_prefix_sum(
 }
 
 // #parallel_take_if
-template <typename ReturnContainer, typename Compare, typename Project>
+template <typename Compare, typename Project>
 auto parallel_take_if(
 	std::integral auto n_jobs,
 	std::integral auto n_threads,
+	std::ranges::random_access_range auto& ret,
 	Compare &&compare,
 	Project &&project
 ) {
@@ -111,7 +112,11 @@ auto parallel_take_if(
 	for (decltype(n_threads) i = 0; i < n_threads; i++)
 		offset[i + 1] = offset[i] + buf[i];
 
-	ReturnContainer ret(offset.back());
+	if constexpr (requires { ret.resize(0); }) {
+		if (ret.size() < offset.back()) {
+			ret.resize(offset.back());
+		}
+	}
 
 	psais::utility::parallel_do(n_jobs, n_threads,
 		[&](auto L, auto R, auto tid) {
@@ -120,8 +125,6 @@ auto parallel_take_if(
 					ret[offset[tid]++] = project(i);
 		}
 	);
-
-	return ret;
 }
 
 } //namespace psais::utility

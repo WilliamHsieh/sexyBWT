@@ -91,39 +91,40 @@ void parallel_prefix_sum(
 }
 
 // #parallel_take_if
-template <typename ReturnContainer, typename Compare, typename Project>
+template <typename Compare, typename Project>
 auto parallel_take_if(
 	std::integral auto n_jobs,
 	std::integral auto n_threads,
+	std::ranges::random_access_range auto& ret,
 	Compare &&compare,
 	Project &&project
 ) {
-	std::vector<ReturnContainer> buf(n_threads);
-	for (decltype(n_threads) i = 0; i < n_threads; i++)
-		buf.reserve(n_jobs / n_threads + 1);
+	std::vector<size_t> buf(n_threads, 0);
 
 	psais::utility::parallel_do(n_jobs, n_threads,
 		[&](auto L, auto R, auto tid) {
 			for (auto i = L; i < R; i++)
-				if (compare(i))
-					buf[tid].push_back(project(i));
+				buf[tid] += !!compare(i);
 		}
 	);
 
 	std::vector<size_t> offset(n_threads + 1, 0);
 	for (decltype(n_threads) i = 0; i < n_threads; i++)
-		offset[i + 1] = offset[i] + buf[i].size();
+		offset[i + 1] = offset[i] + buf[i];
 
-	ReturnContainer ret(offset.back());
+	if constexpr (requires { ret.resize(0); }) {
+		if (ret.size() < offset.back()) {
+			ret.resize(offset.back());
+		}
+	}
 
 	psais::utility::parallel_do(n_jobs, n_threads,
-		[&](auto, auto, auto tid) {
-			for (size_t i = 0; i < buf[tid].size(); i++)
-				ret[offset[tid] + i] = buf[tid][i];
+		[&](auto L, auto R, auto tid) {
+			for (size_t i = L; i < R; i++)
+				if (compare(i))
+					ret[offset[tid]++] = project(i);
 		}
 	);
-
-	return ret;
 }
 
 } //namespace psais::utility

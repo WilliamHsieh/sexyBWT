@@ -290,9 +290,6 @@ void induce (
 	NoInitVector<std::pair<IndexType, IndexType>> &WBI,
 	NoInitVector<IndexType> &ptr
 ) {
-	IndexType size = SA.size();
-	std::vector<std::jthread> stage;
-
 	// views
 	constexpr auto iter_view = [] {
 		if constexpr (InduceType == L_TYPE) {
@@ -302,6 +299,7 @@ void induce (
 		}
 	}();
 
+	IndexType size = SA.size();
 	auto blocks = std::views::iota(IndexType(0), size)
 		| std::views::filter([](IndexType n) { return n % BLOCK_SIZE == 0; });
 
@@ -312,9 +310,12 @@ void induce (
 		prepare(size / BLOCK_SIZE * BLOCK_SIZE, S, SA, T, RBP);
 	}
 
+	auto pool = psais::utility::ThreadPool(2);
+	auto stage = std::array<std::future<void>, 2>{};
+
 	// pipeline
 	for (IndexType L : blocks | iter_view) {
-		stage.clear();
+		for (auto &s : stage) if (s.valid()) s.wait();
 		RBI.swap(RBP);
 		WBI.swap(WBU);
 
@@ -325,9 +326,9 @@ void induce (
 			std::swap(P_L, U_L);
 		}
 
-		stage.emplace_back(prepare<IndexType, CharType>, P_L,
+		stage[0] = pool.enqueue(prepare<IndexType, CharType>, P_L,
 				std::ref(S), std::ref(SA), std::ref(T), std::ref(RBP));
-		stage.emplace_back(update<IndexType>, U_L,
+		stage[1] = pool.enqueue(update<IndexType>, U_L,
 				std::ref(WBU), std::ref(SA));
 
 		// induce

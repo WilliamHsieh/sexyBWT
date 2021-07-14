@@ -57,11 +57,12 @@ struct TypeVector {
 };
 
 // #name_substr
-template<typename IndexType, typename CharType>
+template<typename IndexType>
 auto name_substr(
-	const NoInitVector<CharType> &S,
+	const std::ranges::random_access_range auto &S,
 	const TypeVector &T,
 	const NoInitVector<IndexType> &SA,
+	std::ranges::random_access_range auto S1,
 	size_t kmer
 ) {
 	auto is_same_substr = [&S, &T] (auto x, auto y, auto k) {
@@ -74,7 +75,8 @@ auto name_substr(
 	};
 
 	IndexType n = (IndexType)S.size();
-	auto SA1 = psais::utility::parallel_take_if<NoInitVector<IndexType>>(n, NUM_THREADS,
+	auto SA1 = NoInitVector<IndexType>{};
+	psais::utility::parallel_take_if(n, NUM_THREADS, SA1,
 		[&](IndexType i) { return T.is_LMS(SA[i]); },
 		[&](IndexType i) { return SA[i]; }
 	);
@@ -118,21 +120,20 @@ auto name_substr(
 		}
 	);
 
-	auto S1 = psais::utility::parallel_take_if<NoInitVector<IndexType>>(n, NUM_THREADS,
+	psais::utility::parallel_take_if(n, NUM_THREADS, S1,
 		[&](IndexType i) { return name[i] != EMPTY<IndexType>; },
 		[&](IndexType i) { return name[i]; }
 	);
 
-	auto K1 = is_same.back();
-	return std::tuple{S1, K1};
+	return is_same.back();
 }
 
 // #induce_sort
 
 // ##put_lms
-template<typename IndexType, typename CharType>
+template<typename IndexType>
 auto put_lms(
-	const NoInitVector<CharType> &S,
+	const std::ranges::random_access_range auto &S,
 	const NoInitVector<IndexType> &LMS,
 	const NoInitVector<IndexType> &SA1,
 	const NoInitVector<IndexType> &BA,
@@ -192,7 +193,7 @@ auto put_lms(
 template<typename IndexType, typename CharType>
 void prepare(
 	const size_t L,
-	const NoInitVector<CharType> &S,
+	const std::ranges::random_access_range auto &S,
 	const NoInitVector<IndexType> &SA,
 	const TypeVector &T,
 	NoInitVector<std::pair<CharType, uint8_t>> &RB
@@ -234,7 +235,7 @@ void update(
 // ##induce_impl
 template<auto InduceType, typename IndexType, typename CharType>
 void induce_impl (
-	const NoInitVector<CharType> &S,
+	const std::ranges::random_access_range auto &S,
 	const TypeVector &T,
 	const std::ranges::input_range auto &rng,
 	const IndexType L,
@@ -281,7 +282,7 @@ void induce_impl (
 // ##induce
 template<auto InduceType, typename IndexType, typename CharType>
 void induce (
-	const NoInitVector<CharType> &S,
+	const std::ranges::random_access_range auto &S,
 	const TypeVector &T,
 	NoInitVector<IndexType> &SA,
 	NoInitVector<std::pair<CharType, uint8_t>> &RBP,
@@ -326,7 +327,7 @@ void induce (
 			std::swap(P_L, U_L);
 		}
 
-		stage[0] = pool.enqueue(prepare<IndexType, CharType>, P_L,
+		stage[0] = pool.enqueue(prepare<IndexType, CharType, decltype(S)>, P_L,
 				std::ref(S), std::ref(SA), std::ref(T), std::ref(RBP));
 		stage[1] = pool.enqueue(update<IndexType>, U_L,
 				std::ref(WBU), std::ref(SA));
@@ -338,15 +339,17 @@ void induce (
 }
 
 // ##induce_sort
-template<typename IndexType, typename CharType>
+template<typename IndexType>
 void induce_sort(
-	const NoInitVector<CharType> &S,
+	const std::ranges::random_access_range auto &S,
 	const TypeVector &T,
 	const NoInitVector<IndexType> &SA1,
 	const NoInitVector<IndexType> &LMS,
 	NoInitVector<IndexType> &BA,
 	NoInitVector<IndexType> &SA
 ) {
+	using CharType = decltype(S.begin())::value_type;
+
 	// induce LMS
 	put_lms(S, LMS, SA1, BA, SA);
 
@@ -393,8 +396,8 @@ void induce_sort(
 // #preprocess
 
 // ##get_type
-template<typename IndexType, typename CharType>
-auto get_type(const NoInitVector<CharType> &S) {
+template<typename IndexType>
+auto get_type(const std::ranges::random_access_range auto &S) {
 	auto T = TypeVector(S.size());
 	std::vector<IndexType> same_char_suffix_len(NUM_THREADS, 0);
 	std::vector<IndexType> block_size(NUM_THREADS, 0);
@@ -489,8 +492,8 @@ auto get_type(const NoInitVector<CharType> &S) {
 }
 
 // ##get_bucket
-template<typename IndexType, typename CharType>
-auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
+template<typename IndexType>
+auto get_bucket(const std::ranges::random_access_range auto &S, IndexType K) {
 	NoInitVector<IndexType> local_BA(1ull * (K + 1) * NUM_THREADS);
 	psais::utility::parallel_init(local_BA, 0);
 
@@ -524,15 +527,21 @@ auto get_bucket(const NoInitVector<CharType> &S, IndexType K) {
 // ##get_lms
 template<typename IndexType>
 auto get_lms(const TypeVector &T, const auto size) {
-	return psais::utility::parallel_take_if<NoInitVector<IndexType>>(size, NUM_THREADS,
+	auto LMS = NoInitVector<IndexType>{};
+	psais::utility::parallel_take_if(size, NUM_THREADS, LMS,
 		[&](IndexType i) { return T.is_LMS(i); },
 		[ ](IndexType i) { return i; }
 	);
+	return LMS;
 }
 
 // #suffix_array
-template<typename IndexType, typename CharType>
-NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType K, size_t kmer) {
+template<typename IndexType>
+NoInitVector<IndexType> suffix_array(
+	const std::ranges::random_access_range auto &S,
+	IndexType K,
+	size_t kmer
+) {
 	// 1. get type && bucket array
 	auto T = get_type<IndexType>(S);
 	auto BA = get_bucket(S, K);
@@ -553,7 +562,8 @@ NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType 
 
 	induce_sort(S, T, SA1, LMS, BA, SA);
 
-	auto [S1, K1] = name_substr(S, T, SA, kmer);
+	auto S1 = std::ranges::subrange(SA.begin() + SA.size() - SA1.size(), SA.end());
+	auto K1 = name_substr(S, T, SA, S1, kmer);
 
 	// 3. recursively solve LMS-suffix
 	if (K1 + 1 == LMS.size()) {

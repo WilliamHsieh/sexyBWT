@@ -1,5 +1,6 @@
 #include <iostream>
 #include "radixsortv4.hpp"
+#include "radixsortv3.hpp"
 #include <cassert>
 #include <map>
 #include <set>
@@ -17,31 +18,44 @@ using chrono::duration;
 using chrono::milliseconds;
 
 int main(int argc, char* argv[]) {
-    if(argc<2){
-        cout << "Please provide Dataset Name and Kmers! Example: ./a.out drosophila.fa 5 " << endl;
+    if(argc != 5){
+        cout << "Please provide dataset_full_path, kmers, n_take and mode args! Example: ./a.out ./drosophila.fa 5 2 array" << endl; //mode ops: array, vector
         return 0;
     }
+    string dataset = argv[1]; //full path of dataset
+    int kmers = atoi(argv[2]); //kmers value
+ 	int n_take = atoi(argv[3]); //n_take value in radixsort
+ 	string mode = argv[4]; //choose "array" or "vector" as internal histogram data structure 
+
     auto ta = high_resolution_clock::now();
     auto tb = high_resolution_clock::now();
     duration<double, milli> ms_double;
+	
 	//hardcode test
-    string dataset = argv[1]; //or change to drosophila.fa
-    vector<int> seq = read_fasta_file("dataset/"+dataset); //"drosophila.fa" "20.fa"
+    vector<int> seq = read_fasta_file(dataset); 
+    int n_keys = set<int>(seq.begin(), seq.end()).size();
+    // n_keys = 10000000; //uncomment this to test 10M n_keys. Using n_keys more than the actual one still can produce true sorting result. It's tested already & OK. 
     vector<uint64_t> idx = get_full_idx(seq);
-    int kmers = atoi(argv[2]);
  	cout << "Seq len: " << seq.size() << endl; 
     
  	//call the API
  	ta = high_resolution_clock::now();
- 	int n_take = 2;
- 	int n_keys = 5;
-    auto result = radix_sort<5,2>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
+ 	vector<uint64_t> result;
+ 	if(mode == "vector"){//using radixsortv4.hpp
+ 			result = radix_sort(seq, idx, kmers, n_keys, n_take); 
+ 	}else if(mode == "array"){//using radixsortv3.hpp
+     		result = radix_sort_vec<6,2>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
+ 	}else{
+ 		cout << "Mode is only \"vector\" or \"array\"!" << endl;
+ 		assert(mode == "vector" || mode == "array");
+ 	}
+
     tb = high_resolution_clock::now();
 	ms_double = tb - ta;
 	cout<< "All: " << ms_double.count() << "ms" <<  endl;
  	
 
-	if(dataset == "20.fa"){
+	if(dataset.find("20.fa") != string::npos){
 	 	//assert
 	 	print_sorted_idx(result, kmers);
 	 	vector<uint64_t> gt;

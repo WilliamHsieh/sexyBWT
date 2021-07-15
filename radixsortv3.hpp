@@ -23,67 +23,67 @@ using chrono::duration_cast;
 using chrono::duration;
 using chrono::milliseconds;
 
-vector<int> read_fasta_file(string path) {
-    //A, C, G, T, $ as 1, 2, 3, 4, 0
-    //bool exist =  IsPathExist(path);
-    //cout << "EXIST? --> " << exist << endl;
-    string line;
-    ifstream infile(path);
-    vector<int> sequence;
-    //cout << "Path: " << path << endl;
-    int line_idx = 1;
-    while (getline(infile, line)) {
-//        cout <<"sampai sini 0" << endl;
-        //cout << "line idx: " << line_idx << endl;
-        line_idx++;
-        char first_char = line[0];
-        //cout << "first char: " << first_char << endl;
-        if (first_char == '>') {
-            continue;
-        }
-        for (char &c : line) {
-            int temp;
-            if (tolower(c) == 'a'){
-                temp = 1;
-            }
-            else if (tolower(c) == 'c'){
-                temp = 2;
-            } else if (tolower(c) == 'g')
-            {
-                temp = 3;
-            } else if (tolower(c) == 't')
-            {
-                temp = 4;
-            } else {
-                temp = 1;
-                // cout << "Char fasta file invalid: " << c << endl;
-            }
-            sequence.push_back(temp);
-        }
-        sequence.push_back(DOLLAR); //push back dollar in the end of sequence
-    }
-    return sequence;
-}
+// vector<int> read_fasta_file(string path) {
+//     //A, C, G, T, $ as 1, 2, 3, 4, 0
+//     //bool exist =  IsPathExist(path);
+//     //cout << "EXIST? --> " << exist << endl;
+//     string line;
+//     ifstream infile(path);
+//     vector<int> sequence;
+//     //cout << "Path: " << path << endl;
+//     int line_idx = 1;
+//     while (getline(infile, line)) {
+// //        cout <<"sampai sini 0" << endl;
+//         //cout << "line idx: " << line_idx << endl;
+//         line_idx++;
+//         char first_char = line[0];
+//         //cout << "first char: " << first_char << endl;
+//         if (first_char == '>') {
+//             continue;
+//         }
+//         for (char &c : line) {
+//             int temp;
+//             if (tolower(c) == 'a'){
+//                 temp = 1;
+//             }
+//             else if (tolower(c) == 'c'){
+//                 temp = 2;
+//             } else if (tolower(c) == 'g')
+//             {
+//                 temp = 3;
+//             } else if (tolower(c) == 't')
+//             {
+//                 temp = 4;
+//             } else {
+//                 temp = 1;
+//                 // cout << "Char fasta file invalid: " << c << endl;
+//             }
+//             sequence.push_back(temp);
+//         }
+//         sequence.push_back(DOLLAR); //push back dollar in the end of sequence
+//     }
+//     return sequence;
+// }
 
 
-void print_sorted_idx(vector<uint64_t> &sorted_index, int k){
-    cout << "SORTED INDEX, K-" << k << ": ";
-    for (int i=0; i<sorted_index.size(); i++){
-       cout << sorted_index[i] << "; ";
-    }
-    cout<<endl;
-}
+// void print_sorted_idx(vector<uint64_t> &sorted_index, int k){
+//     cout << "SORTED INDEX, K-" << k << ": ";
+//     for (int i=0; i<sorted_index.size(); i++){
+//        cout << sorted_index[i] << "; ";
+//     }
+//     cout<<endl;
+// }
 
-template <typename T, int n_keys>
-void print_histogram(T (&histogram_local)[N_THREADS]){
-    for(int i=0; i<N_THREADS; i++){
-        // cout << "tid: " << i << ", hitogram: ";
-        for(int j=0; j<n_keys; j++){
-            cout << histogram_local[i].cnt[j] << "; ";
-        }
-        cout << endl;
-    }
-}
+// template <typename T, int n_keys>
+// void print_histogram(T (&histogram_local)[N_THREADS]){
+//     for(int i=0; i<N_THREADS; i++){
+//         // cout << "tid: " << i << ", hitogram: ";
+//         for(int j=0; j<n_keys; j++){
+//             cout << histogram_local[i].cnt[j] << "; ";
+//         }
+//         cout << endl;
+//     }
+// }
 
 
 template <typename T, int n_keys, int n_take>
@@ -138,13 +138,13 @@ void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&histog
     }
 }
 
-vector<uint64_t> get_full_idx(vector<int> &seq){
-    vector<uint64_t> idx;
-    for(int i = 0; i<seq.size(); i++){
-        idx.push_back(i);
-    }
-    return idx;
-}
+// vector<uint64_t> get_full_idx(vector<int> &seq){
+//     vector<uint64_t> idx;
+//     for(int i = 0; i<seq.size(); i++){
+//         idx.push_back(i);
+//     }
+//     return idx;
+// }
 
 //LOCAL TO GLOBAL METHODS
 template <int n_keys>
@@ -272,62 +272,62 @@ void suffix_placement(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&gl
     }
 }
 
-template <int n_keys>
-int * addition(uint64_t a[N_THREADS*n_keys]){
-    static int c[n_keys];
-    c[0] = 0;
-    c[1] = 0;
-    c[2] = 0;
-    c[3] = 0;
-    for (int th = 0; th < N_THREADS; th++){
-        uint32<n_keys> check1 = make_uint(c[0],c[1],c[2],c[3]);
-        uint32<n_keys> check2 = make_uint(a[n_keys*th+0],a[n_keys*th+1],a[n_keys*th+2],a[n_keys*th+3]);
-        uint32<n_keys> result = add(check1, check2);
-        store(c, result);
-    }
-    return c;
-}
+// template <int n_keys>
+// int * addition(uint64_t a[N_THREADS*n_keys]){
+//     static int c[n_keys];
+//     c[0] = 0;
+//     c[1] = 0;
+//     c[2] = 0;
+//     c[3] = 0;
+//     for (int th = 0; th < N_THREADS; th++){
+//         uint32<n_keys> check1 = make_uint(c[0],c[1],c[2],c[3]);
+//         uint32<n_keys> check2 = make_uint(a[n_keys*th+0],a[n_keys*th+1],a[n_keys*th+2],a[n_keys*th+3]);
+//         uint32<n_keys> result = add(check1, check2);
+//         store(c, result);
+//     }
+//     return c;
+// }
 
 
-template <typename T, int n_keys, int n_take>
-void using_omp(uint64_t threadResult[N_THREADS*n_keys], T local[N_THREADS], uint64_t tempResult[N_THREADS*n_keys], uint64_t threadB[N_THREADS*n_keys], T (&histogram)[N_THREADS]){
+// template <typename T, int n_keys, int n_take>
+// void using_omp(uint64_t threadResult[N_THREADS*n_keys], T local[N_THREADS], uint64_t tempResult[N_THREADS*n_keys], uint64_t threadB[N_THREADS*n_keys], T (&histogram)[N_THREADS]){
     
-    uint64_t cnt[n_keys];
-    #pragma omp parallel
-    for (int horizontal = 0; horizontal < N_THREADS; horizontal++){
-        int pos = 0;
-        //#pragma omp for nowait
-        for (int vertical = 0; vertical < N_THREADS; vertical++){
-            //#pragma omp critical
-            for(int idx = 0; idx < n_keys; idx++){
-                if (horizontal < vertical){
-                    if(idx == 0){
-                        threadResult[pos] = 0;
-                        pos++;
-                    }
-                    else{
-                        threadResult[pos] = local[vertical].cnt[idx-1];
-                        pos++;
-                    }
-                }
-                else{
-                    threadResult[pos] = local[vertical].cnt[idx];
-                    pos++;
-                }
-            }
-        }
+//     uint64_t cnt[n_keys];
+//     #pragma omp parallel
+//     for (int horizontal = 0; horizontal < N_THREADS; horizontal++){
+//         int pos = 0;
+//         //#pragma omp for nowait
+//         for (int vertical = 0; vertical < N_THREADS; vertical++){
+//             //#pragma omp critical
+//             for(int idx = 0; idx < n_keys; idx++){
+//                 if (horizontal < vertical){
+//                     if(idx == 0){
+//                         threadResult[pos] = 0;
+//                         pos++;
+//                     }
+//                     else{
+//                         threadResult[pos] = local[vertical].cnt[idx-1];
+//                         pos++;
+//                     }
+//                 }
+//                 else{
+//                     threadResult[pos] = local[vertical].cnt[idx];
+//                     pos++;
+//                 }
+//             }
+//         }
         
-        const int *result = addition<n_keys>(threadResult);
-        for (int i = 0; i < n_keys; i++){
-            cnt[i] = *(result+i);
-        }
-        // histogram[horizontal].cnt.assign(cnt, cnt + pow(n_keys, n_take));
-        copy(cnt, cnt+pow(n_keys, n_take), histogram[horizontal].cnt);
-    }
-}
+//         const int *result = addition<n_keys>(threadResult);
+//         for (int i = 0; i < n_keys; i++){
+//             cnt[i] = *(result+i);
+//         }
+//         // histogram[horizontal].cnt.assign(cnt, cnt + pow(n_keys, n_take));
+//         copy(cnt, cnt+pow(n_keys, n_take), histogram[horizontal].cnt);
+//     }
+// }
 
 template<int n_keys, int n_take>
-vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
+vector<uint64_t> radix_sort_vec(vector<int> &seq, vector<uint64_t> &idx, int kmers){
 //    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa" 
     struct thread_cnt
     {

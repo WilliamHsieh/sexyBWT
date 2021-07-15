@@ -535,13 +535,14 @@ auto get_lms(const TypeVector &T, const auto size) {
 	return LMS;
 }
 
+#include <iostream>
+#include <chrono>
+
 // #suffix_array
-template<typename IndexType>
-NoInitVector<IndexType> suffix_array(
-	const std::ranges::random_access_range auto &S,
-	IndexType K,
-	size_t kmer
-) {
+template<typename IndexType, typename CharType>
+NoInitVector<IndexType> suffix_array(const NoInitVector<CharType> &S, IndexType K, size_t kmer) {
+	uint64_t tot = 0;
+	auto bg = std::chrono::high_resolution_clock::now();
 	// 1. get type && bucket array
 	auto T = get_type<IndexType>(S);
 	auto BA = get_bucket(S, K);
@@ -570,13 +571,24 @@ NoInitVector<IndexType> suffix_array(
 		for (size_t i = 0; i < LMS.size(); i++) {
 			SA1[S1[i]] = i;
 		}
+		auto ed = std::chrono::high_resolution_clock::now();
+		tot += (ed - bg).count();
+	// 1. get type && bucket array
 	} else {
+		auto ed = std::chrono::high_resolution_clock::now();
+		tot += (ed - bg).count();
 		SA1 = suffix_array(S1, K1, kmer >> 1);
 	}
+	auto bg2 = std::chrono::high_resolution_clock::now();
 
 	// 4. induce orig SA
 	psais::utility::parallel_init(SA, EMPTY<IndexType>);
 	induce_sort(S, T, SA1, LMS, BA, SA);
+
+	auto ed2 = std::chrono::high_resolution_clock::now();
+
+	tot += (ed2 - bg2).count();
+	std::cout << S.size() << ' ' << kmer << ' ' << tot << std::endl;
 
 	return SA;
 }

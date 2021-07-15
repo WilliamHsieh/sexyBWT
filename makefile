@@ -9,5 +9,8 @@ test: tests/main.cpp
 psais: example/fasta.cpp
 	$(CC) $(CCFLAG) $^ -o $@
 
+radix_sort: example/radix_sort.cpp
+	$(CC) $(CCFLAG) $^ -o $@
+
 clean:
 	rm -f a.out test psais

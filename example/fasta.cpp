@@ -14,5 +14,5 @@ int main() {
 		str += buf;
 	}
 
-	auto result = psais::suffix_array<uint32_t>(str);
+	auto result = psais::suffix_array<uint32_t>(str, 256);
 }

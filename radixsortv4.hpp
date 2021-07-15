@@ -33,7 +33,6 @@ vector<int> read_fasta_file(string path) {
     //cout << "Path: " << path << endl;
     int line_idx = 1;
     while (getline(infile, line)) {
-//        cout <<"sampai sini 0" << endl;
         //cout << "line idx: " << line_idx << endl;
         line_idx++;
         char first_char = line[0];
@@ -88,23 +87,24 @@ void print_histogram(T (&histogram_local)[N_THREADS]){
 
 template <typename T, int n_keys, int n_take>
 void key_counting_helper(uint64_t start, uint64_t end, int tid, T (&histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, int k){
+    int test = 5;
+    int test_n_take = 2;
     uint64_t start_take;
     uint64_t len = seq.size();
     int counter_idx, seq_take;    
     // uint64_t cnt[(int)(pow(n_keys, n_take))] = {0};
-    vector<uint64_t> cnt((int)(pow(n_keys, n_take)),0);
-    int cnt_size = (int)(pow(n_keys, n_take));
-    
+    vector<uint64_t> cnt((int)(pow(test, test_n_take)),0);
+    int cnt_size = (int)(pow(test, test_n_take));
     for (uint64_t i=start; i<end; i++) {
-        counter_idx = 0; int power = n_take-1;
+        counter_idx = 0; int power = test_n_take-1;
         start_take = idx[i]+k;
         if(start_take<len){
             seq_take = seq[start_take];
-            counter_idx += seq_take*pow(n_keys,power); 
-            for (int j=1; j < n_take; j++){
+            counter_idx += seq_take*pow(test,power); 
+            for (int j=1; j < test_n_take; j++){
                 power -= 1;
                 seq_take = seq[start_take+j];
-                counter_idx += seq_take*pow(n_keys,power);
+                counter_idx += seq_take*pow(test,power);
             }
         }
         else{
@@ -159,11 +159,11 @@ void old_style(vector<uint64_t> &a, vector<uint64_t> &b, vector<uint64_t> &c){
 
 template <int n_keys, int n_take>
 void simd_style(vector<uint64_t> &a, vector<uint64_t> &b, vector<uint64_t> &c){
-    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(&a);
-    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(&b);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(&a[0]);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(&b[0]);
     int64<N_THREADS*(int)(pow(n_keys, n_take))> C = add(A, B);
     
-    store(&c, C);
+    store(&c[0], C);
     
 }
 
@@ -331,11 +331,12 @@ void using_omp(uint64_t threadResult[N_THREADS*n_keys], T local[N_THREADS], uint
 template<int n_keys, int n_take>
 vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
 //    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+    int n_keys2 = 5, n_take2 = 2;
     struct thread_cnt
     {
         // uint64_t cnt[(int)(pow(n_keys, n_take))];
         vector <uint64_t> cnt;
-        thread_cnt() : cnt((int)(pow(n_keys, n_take))) {}
+        // thread_cnt() : cnt((int)(pow(n_keys2, n_take2))) {}
     };
     vector<int> local;
     // uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
@@ -346,7 +347,10 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
     vector<uint64_t> threadB(N_THREADS*(int)(pow(n_keys, n_take)),0);
 
     thread_cnt histogram_local[N_THREADS];
+    for(int i = 0; i<N_THREADS; i++){histogram_local[i].cnt.resize((int)(pow(n_keys2, n_take2)),0);}
     thread_cnt histogram_global[N_THREADS];
+    for(int i = 0; i<N_THREADS; i++){histogram_global[i].cnt.resize((int)(pow(n_keys2, n_take2)),0);}
+
     vector<uint64_t> sorted_index(seq.size(),0);
     auto t1 = high_resolution_clock::now();
     auto t2 = high_resolution_clock::now();

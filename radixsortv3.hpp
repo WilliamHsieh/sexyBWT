@@ -328,7 +328,7 @@ void using_omp(uint64_t threadResult[N_THREADS*n_keys], T local[N_THREADS], uint
 
 template<int n_keys, int n_take>
 vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
-//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa" 
     struct thread_cnt
     {
         uint64_t cnt[(int)(pow(n_keys, n_take))];

@@ -1,5 +1,5 @@
 #include <iostream>
-#include "radixsortv3.hpp"
+#include "radixsortv4.hpp"
 #include <cassert>
 #include <map>
 #include <set>
@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     
  	//call the API
  	ta = high_resolution_clock::now();
-    auto result = radix_sort<5,3>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
+    auto result = radix_sort<5,2>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
     tb = high_resolution_clock::now();
 	ms_double = tb - ta;
 	cout<< "All: " << ms_double.count() << "ms" <<  endl;

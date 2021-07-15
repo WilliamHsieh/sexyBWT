@@ -7,6 +7,8 @@
 #include <random>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+
 
 using namespace std;
 using chrono::high_resolution_clock;
@@ -14,15 +16,19 @@ using chrono::duration_cast;
 using chrono::duration;
 using chrono::milliseconds;
 
-int main() {
+int main(int argc, char* argv[]) {
+    if(argc<2){
+        cout << "Please provide Dataset Name and Kmers! Example: ./a.out drosophila.fa 5 " << endl;
+        return 0;
+    }
     auto ta = high_resolution_clock::now();
     auto tb = high_resolution_clock::now();
     duration<double, milli> ms_double;
 	//hardcode test
-	string dataset = "20.fa"; //or change to drosophila.fa
+    string dataset = argv[1]; //or change to drosophila.fa
     vector<int> seq = read_fasta_file("dataset/"+dataset); //"drosophila.fa" "20.fa"
     vector<uint64_t> idx = get_full_idx(seq);
-    int kmers = 5;
+    int kmers = atoi(argv[2]);
  	cout << "Seq len: " << seq.size() << endl; 
     
  	//call the API

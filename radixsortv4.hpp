@@ -149,29 +149,26 @@ vector<uint64_t> get_full_idx(vector<int> &seq){
 }
 
 //LOCAL TO GLOBAL METHODS
-template <int n_keys>
-void old_style(uint64_t a[N_THREADS*n_keys], uint64_t b[N_THREADS*n_keys], uint64_t c[N_THREADS*n_keys]){
-    
-    
-    for(int i = 0; i < N_THREADS*n_keys; i++)
+template <int n_keys, int n_take>    
+void old_style(vector<uint64_t> &a, vector<uint64_t> &b, vector<uint64_t> &c){
+    for(int i = 0; i < N_THREADS*(int)(pow(n_keys, n_take)); i++)
         {
             c[i] = a[i] + b[i];
         }
 }
 
 template <int n_keys, int n_take>
-void simd_style(uint64_t a[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t b[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t c[N_THREADS*(int)(pow(n_keys, n_take))]){
-    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(a);
-    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(b);
+void simd_style(vector<uint64_t> &a, vector<uint64_t> &b, vector<uint64_t> &c){
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(&a);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(&b);
     int64<N_THREADS*(int)(pow(n_keys, n_take))> C = add(A, B);
     
-    store(c, C);
+    store(&c, C);
     
 }
 
-template <typename T, int n_keys, int n_take>
-void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))], T local[(int)(pow(n_keys, n_take))], uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))], T histogram[(int)(pow(n_keys, n_take))]){
-    
+template <typename T, int n_keys, int n_take>                   
+void local2global_hist(int SIMD, vector<uint64_t> &threadResult, T (&local)[N_THREADS], vector<uint64_t> &tempResult, vector<uint64_t> &threadB, T (&histogram)[N_THREADS]){
     // uint64_t cnt[(int)(pow(n_keys, n_take))];
     vector<uint64_t> cnt((int)(pow(n_keys, n_take)),0);
     int cnt_size = (int)(pow(n_keys, n_take));
@@ -207,7 +204,7 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_key
                 simd_style<n_keys, n_take>(threadResult, tempResult, threadB);
             }
             else{
-                old_style<n_keys>(threadResult, tempResult, threadB);
+                old_style<n_keys,n_take>(threadResult, tempResult, threadB);
             }
 
             for (int i = 0; i < N_THREADS*cnt_size; i++){
@@ -341,9 +338,13 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
         thread_cnt() : cnt((int)(pow(n_keys, n_take))) {}
     };
     vector<int> local;
-    uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
-    uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))];
-    uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))];
+    // uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    // uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    // uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))];
+    vector<uint64_t> tempResult(N_THREADS*(int)(pow(n_keys, n_take)),0);
+    vector<uint64_t> threadResult(N_THREADS*(int)(pow(n_keys, n_take)),0);
+    vector<uint64_t> threadB(N_THREADS*(int)(pow(n_keys, n_take)),0);
+
     thread_cnt histogram_local[N_THREADS];
     thread_cnt histogram_global[N_THREADS];
     vector<uint64_t> sorted_index(seq.size(),0);
@@ -358,7 +359,7 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers){
         // t2 = high_resolution_clock::now();
         // ms_double = t2 - t1;
         // cout<< "Step 1: " << ms_double.count() << "ms" <<  endl;
-        local2global_hist<thread_cnt,n_keys,n_take>(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
+        local2global_hist<thread_cnt,n_keys,n_take>(0, threadResult, histogram_local, tempResult, threadB, histogram_global);
         // t1 = high_resolution_clock::now();
         // ms_double = t1 - t2;
         // cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;

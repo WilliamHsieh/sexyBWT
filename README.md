@@ -16,5 +16,5 @@ To test:
 Note:<br>
 * Test case for the correctness of sorting result: run `./a.out ./dataset/20.fa <kmers> 1 <hist_internal_data_structure>`, where `kmers` can be integer of 1 to 5.
 * Some exec. time test results are provided below.
-<img src="./imgs/time-exec_vs_n-threads_with-n_take3-16cores-machine.JPG" alt="timevsthreads" width="400"/>
-<img src="./imgs/time-exec_vs_n_take_in-16cores-machine.JPG" alt="timevsntake" width="400"/>
+<img src="./imgs/time-exec_vs_n-threads_with-n_take3-16cores-machine.JPG" alt="timevsthreads" width="800"/>
+<img src="./imgs/time-exec_vs_n_take_in-16cores-machine.JPG" alt="timevsntake" width="800"/>

@@ -11,15 +11,12 @@
 #include <stdio.h>
 #include <omp.h>
 #include <cmath>
-#include <random>
-#include <algorithm>
+#include <sstream>
 
-#define N_KEYS 5
 #define N_THREADS 4
 #define DOLLAR 0
 
 using namespace std;
-
 using namespace simdpp;
 using chrono::high_resolution_clock;
 using chrono::duration_cast;
@@ -36,7 +33,6 @@ vector<int> read_fasta_file(string path) {
     //cout << "Path: " << path << endl;
     int line_idx = 1;
     while (getline(infile, line)) {
-//        cout <<"sampai sini 0" << endl;
         //cout << "line idx: " << line_idx << endl;
         line_idx++;
         char first_char = line[0];
@@ -68,109 +64,6 @@ vector<int> read_fasta_file(string path) {
     return sequence;
 }
 
-struct alignas(64) thread_cnt
-{
-    uint64_t cnt[N_KEYS];
-};
-
-void print_sorted_idx(vector<uint64_t> &sorted_index, int k){
-    cout << "SORTED INDEX, K-" << k << ": ";
-    for (int i=0; i<sorted_index.size(); i++){
-       cout << sorted_index.at(i) << "; ";
-    }
-    cout<<endl;
-}
-
-void print_histogram(thread_cnt (&histogram_local)[N_THREADS]){
-    for(int i=0; i<N_THREADS; i++){
-        // cout << "tid: " << i << ", hitogram: ";
-        for(int j=0; j<N_KEYS; j++){
-            cout << histogram_local[i].cnt[j] << "; ";
-        }
-        cout << endl;
-    }
-}
-
-void algo_non_thread(vector<int> &seq, vector<uint64_t> &idx)
-{
-    uint64_t len = idx.size();
-    uint64_t histogram[N_KEYS];
-    for(int i = 0; i<N_KEYS; i++) histogram[i] = 0;
-    for (uint64_t i=0; i<len; i++) {
-        ++histogram[seq.at(idx.at(i))-1];
-    }
-
-    // test to print histogram
-    // for(int i=0; i<4; i++){
-    //     cout<<"val-"<<i<<": "<<histogram[i]<<endl;
-    // }
-}
-
-
-void key_counting_helper(uint64_t start, uint64_t end, int tid, thread_cnt (&histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, int k){
-    uint64_t cnt[N_KEYS];
-    for(int i=0; i<N_KEYS; i++) cnt[i]=0;
-    uint64_t temp1, temp2;
-    uint64_t len = seq.size();
-    auto t1 = high_resolution_clock::now();
-    for (uint64_t i=start; i<end; i++) {
-        temp1 = idx.at(i)+k;
-        if(temp1<len){
-            temp2 = seq.at(temp1);
-        }else{ //if it access more than sequence idx, use DOLLAR
-            temp2 = DOLLAR;
-        }
-        ++cnt[temp2];
-    }
-    // if(tid == 0){
-    //         auto t2 = high_resolution_clock::now();
-    //         duration<double, milli> ms_double = t2 - t1;
-    //         cout << "++++++++++> K= " + to_string(k) + ", counting for: " << ms_double.count() << endl;
-    //     }
-     uint64_t acc = 0;
-     for(int i=0; i<N_KEYS; i++){
-         cnt[i] += acc;
-         acc = cnt[i];
-     }
-     copy(cnt, cnt+N_KEYS, histogram[tid].cnt);
-}
-
-void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt (&histogram)[N_THREADS])
-{
-    uint64_t len = idx.size();
-    uint64_t n_elements = floor(len/N_THREADS);
-    uint64_t n_remaining_elements = len%N_THREADS;
-    for (int i=0; i<N_THREADS; i++) for(int j=0; j<N_KEYS; j++) histogram[i].cnt[j] = 0;
-    #pragma omp parallel num_threads(N_THREADS)
-    {
-        int tid = omp_get_thread_num();
-        uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
-        uint64_t end = start + n_elements;
-        // #pragma omp critical
-        // {if(k==1){cout<<"tid: "<< tid << ", start: " << start << ", end: " << end << endl;}}
-        if(tid == 0) end += n_remaining_elements;
-        auto t1 = high_resolution_clock::now();
-        // if(tid==0){
-        //     cout << "K="+to_string(k)+", start: " +to_string(start)+", end: "+to_string(end)+"\n";
-        // }
-        key_counting_helper(start, end, tid, histogram, seq, idx, k);
-        // if(tid == 0){
-        //     auto t2 = high_resolution_clock::now();
-        //     duration<double, milli> ms_double = t2 - t1;
-        //     cout << "------------> K= " + to_string(k) + ", key helper: " << ms_double.count() << endl;
-        // }
-    }
-
-    // test to print histogram
-//    for(int i=0; i<N_THREADS; i++){
-//        cout << "cnt tid-" << i << ": ";
-//        for(int j=0; j<N_KEYS; j++){
-//            cout << histogram[i].cnt[j] << "; ";
-//        }
-//        cout << endl;
-//    }
-}
-
 vector<uint64_t> get_full_idx(vector<int> &seq){
     vector<uint64_t> idx;
     for(int i = 0; i<seq.size(); i++){
@@ -179,33 +72,178 @@ vector<uint64_t> get_full_idx(vector<int> &seq){
     return idx;
 }
 
-//LOCAL TO GLOBAL METHODS
+void print_sorted_idx(vector<uint64_t> &sorted_index, int k){
+    cout << "SORTED INDEX, K-" << k << ": ";
+    for (int i=0; i<sorted_index.size(); i++){
+       cout << sorted_index[i] << "; ";
+    }
+    cout<<endl;
+}
 
-void old_style(uint64_t a[N_THREADS*N_KEYS], uint64_t b[N_THREADS*N_KEYS], uint64_t c[N_THREADS*N_KEYS]){
+template <typename T, int n_keys>
+void print_histogram(T (&histogram_local)[N_THREADS]){
+    for(int i=0; i<N_THREADS; i++){
+        // cout << "tid: " << i << ", hitogram: ";
+        for(int j=0; j<n_keys; j++){
+            cout << histogram_local[i].cnt[j] << "; ";
+        }
+        cout << endl;
+    }
+}
+
+
+template <typename T>
+void key_counting_helper(uint64_t start, uint64_t end, int tid, T (&histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, int k, int n_keys, int n_take){
+    uint64_t start_take;
+    uint64_t len = seq.size();
+    int counter_idx, seq_take;    
+    // uint64_t cnt[(int)(pow(n_keys, n_take))] = {0};
+    vector<uint64_t> cnt((int)(pow(n_keys, n_take)),0);
+    int cnt_size = (int)(pow(n_keys, n_take));
+    for (uint64_t i=start; i<end; i++) {
+        counter_idx = 0; int power = n_take-1;
+        start_take = idx[i]+k;
+        if(start_take<len){
+            seq_take = seq[start_take];
+            counter_idx += seq_take*pow(n_keys,power); 
+            for (int j=1; j < n_take; j++){
+                power -= 1;
+                seq_take = seq[start_take+j];
+                counter_idx += seq_take*pow(n_keys,power);
+            }
+        }
+        else{
+            counter_idx = DOLLAR;
+        }
+        ++cnt[counter_idx];
+    }
+    uint64_t acc = 0;
+    for(int i=0; i<cnt_size; i++){
+        cnt[i] += acc;
+        acc = cnt[i];
+    }
+    histogram[tid].cnt = cnt;
+    // histogram[tid].cnt.assign(cnt, cnt + cnt_size);
+    // copy(cnt, cnt+cnt_size, histogram[tid].cnt);
+}
+
+template <typename T, int n_keys, int n_take>
+void key_counting_helper_arr(uint64_t start, uint64_t end, int tid, T (&histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, int k){
+    uint64_t start_take;
+    uint64_t len = seq.size();
+    int counter_idx, seq_take;    
+    uint64_t cnt[(int)(pow(n_keys, n_take))] = {0};
+    // for(int i=0; i<cnt_size; i++) cnt[i]=0;
+    int cnt_size = (int)(pow(n_keys, n_take));
     
+    for (uint64_t i=start; i<end; i++) {
+        counter_idx = 0; int power = n_take-1;
+        start_take = idx[i]+k;
+        if(start_take<len){
+            seq_take = seq[start_take];
+            counter_idx += seq_take*pow(n_keys,power); 
+            for (int j=1; j < n_take; j++){
+                power -= 1;
+                seq_take = seq[start_take+j];
+                counter_idx += seq_take*pow(n_keys,power);
+            }
+        }
+        else{
+            counter_idx = DOLLAR;
+        }
+        ++cnt[counter_idx];
+    }
+    uint64_t acc = 0;
+         for(int i=0; i<cnt_size; i++){
+             cnt[i] += acc;
+             acc = cnt[i];
+         }
+    copy(cnt, cnt+cnt_size, histogram[tid].cnt);
+}
+
+
+template <typename T>
+void key_counting(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&histogram)[N_THREADS], int n_keys, int n_take)
+{
+    uint64_t len = idx.size();
+    uint64_t n_elements = floor(len/N_THREADS);
+    uint64_t n_remaining_elements = len%N_THREADS;
+    for (int i=0; i<N_THREADS; i++) for(int j=0; j<n_keys; j++) histogram[i].cnt[j] = 0;
     
-    for(int i = 0; i < N_THREADS*N_KEYS; i++)
+    #pragma omp parallel num_threads(N_THREADS)
+    {
+        int tid = omp_get_thread_num();
+        uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
+        uint64_t end = start + n_elements;
+        if(tid == 0) end += n_remaining_elements;
+        key_counting_helper<T>(start, end, tid, histogram, seq, idx, k, n_keys, n_take);
+    }
+}
+
+template <typename T, int n_keys, int n_take>
+void key_counting_arr(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&histogram)[N_THREADS])
+{
+    uint64_t len = idx.size();
+    uint64_t n_elements = floor(len/N_THREADS);
+    uint64_t n_remaining_elements = len%N_THREADS;
+    for (int i=0; i<N_THREADS; i++) for(int j=0; j<n_keys; j++) histogram[i].cnt[j] = 0;
+    
+    #pragma omp parallel num_threads(N_THREADS)
+    {
+        int tid = omp_get_thread_num();
+        uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
+        uint64_t end = start + n_elements;
+        if(tid == 0) end += n_remaining_elements;
+        key_counting_helper_arr<T, n_keys, n_take>(start, end, tid, histogram, seq, idx, k);
+    }
+}
+
+//LOCAL TO GLOBAL METHODS
+void old_style(vector<uint64_t> &a, vector<uint64_t> &b, vector<uint64_t> &c, int n_keys, int n_take){
+    for(int i = 0; i < N_THREADS*(int)(pow(n_keys, n_take)); i++)
         {
             c[i] = a[i] + b[i];
         }
 }
 
-void simd_style(uint64_t a[N_THREADS*N_KEYS], uint64_t b[N_THREADS*N_KEYS], uint64_t c[N_THREADS*N_KEYS]){
-    int64<N_THREADS*N_KEYS> A = load(a);
-    int64<N_THREADS*N_KEYS> B = load(b);
-    int64<N_THREADS*N_KEYS> C = add(A, B);
+template <int n_keys>
+void old_style_arr(uint64_t a[N_THREADS*n_keys], uint64_t b[N_THREADS*n_keys], uint64_t c[N_THREADS*n_keys]){
+    for(int i = 0; i < N_THREADS*n_keys; i++)
+        {
+            c[i] = a[i] + b[i];
+        }
+}
+
+template <int n_keys, int n_take>
+void simd_style(vector<uint64_t> &a, vector<uint64_t> &b, vector<uint64_t> &c){
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(&a[0]);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(&b[0]);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> C = add(A, B);
+    
+    store(&c[0], C);
+    
+}
+
+template <int n_keys, int n_take>
+void simd_style_arr(uint64_t a[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t b[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t c[N_THREADS*(int)(pow(n_keys, n_take))]){
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> A = load(a);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> B = load(b);
+    int64<N_THREADS*(int)(pow(n_keys, n_take))> C = add(A, B);
     
     store(c, C);
     
 }
 
-void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt local[N_THREADS], uint64_t tempResult[N_THREADS*N_KEYS], uint64_t threadB[N_THREADS*N_KEYS], thread_cnt histogram[N_THREADS]){
-    
-    uint64_t cnt[N_KEYS];
+
+template <typename T>                   
+void local2global_hist(int SIMD, vector<uint64_t> &threadResult, T (&local)[N_THREADS], vector<uint64_t> &tempResult, vector<uint64_t> &threadB, T (&histogram)[N_THREADS], int n_keys, int n_take){
+    // uint64_t cnt[(int)(pow(n_keys, n_take))];
+    vector<uint64_t> cnt((int)(pow(n_keys, n_take)),0);
+    int cnt_size = (int)(pow(n_keys, n_take));
     for (int th = 0; th < N_THREADS; ++th){
         int pos = 0;
         for (int iterator = 0; iterator < N_THREADS; ++iterator){
-            for(int idx = 0; idx < N_KEYS; idx++){
+            for(int idx = 0; idx < cnt_size; idx++){
                 if (iterator < th){
                     if(idx == 0){
                         threadResult[pos] = 0;
@@ -223,7 +261,7 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*N_KEYS], thread
             }
         }
         if(th == 0){
-            for (int i = 0; i < N_THREADS*N_KEYS; i++){
+            for (int i = 0; i < N_THREADS*cnt_size; i++){
                 tempResult[i] = threadResult[i];
                 threadResult[i] = 0;
             }
@@ -231,13 +269,14 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*N_KEYS], thread
         }
         else{
             if (SIMD == 1){
-                simd_style(threadResult, tempResult, threadB);
+                // simd_style<n_keys, n_take>(threadResult, tempResult, threadB); //can't use this since needs constant val to define SIMD vec
+                cout << "Can't use this since it needs constant val to define SIMD vec" << endl;
             }
             else{
-                old_style(threadResult, tempResult, threadB);
+                old_style(threadResult, tempResult, threadB, n_keys, n_take);
             }
 
-            for (int i = 0; i < N_THREADS*N_KEYS; i++){
+            for (int i = 0; i < N_THREADS*cnt_size; i++){
                 tempResult[i] = threadB[i];
                 threadResult[i] = 0;
                 threadB[i] = 0;
@@ -248,37 +287,142 @@ void local2global_hist(int SIMD, uint64_t threadResult[N_THREADS*N_KEYS], thread
     }
     
     for (int th = 0; th<N_THREADS; th++){
-        for (int key = 0; key<N_KEYS; key++){
-            cnt[key] = tempResult[th*N_KEYS+key];
+        for (int key = 0; key<cnt_size; key++){
+            cnt[key] = tempResult[th*cnt_size+key];
         }
-        copy(cnt, cnt+N_KEYS, histogram[th].cnt);
+        histogram[th].cnt = cnt;
+        // histogram[th].cnt.assign(cnt, cnt + cnt_size);
+        // copy(cnt, cnt+cnt_size, histogram[th].cnt);
     }
 }
 
-void suffix_placement_helper(uint64_t start, uint64_t end, int tid, thread_cnt (&global_histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, vector<uint64_t> &sorted_index, int k){
+template <typename T, int n_keys, int n_take>
+void local2global_hist_arr(int SIMD, uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))], T local[(int)(pow(n_keys, n_take))], uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))], uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))], T histogram[(int)(pow(n_keys, n_take))]){
     
-    uint64_t n_placement[N_KEYS];
-    for(int i=0; i<N_KEYS; i++) n_placement[i]=0;
-    uint64_t key = 0; uint64_t idx_i = 0; uint64_t len = seq.size();
-    // if(k==0 && tid==0){
-    //     print_sorted_idx(sorted_index, k);
-    // }
-    for(uint64_t i = end; i > start; i--){
-        idx_i = idx.at(i-1)+k;
-        // if(k==0 && tid==0){cout<<"i: " << i-1 << ", idx: " << idx.at(i-1) << endl;}
-        if(idx_i<len){
-            key = seq.at(idx_i);
-        }else{ //if it access more than sequence idx, use DOLLAR
-            key = DOLLAR;
+    uint64_t cnt[(int)(pow(n_keys, n_take))];
+    int cnt_size = (int)(pow(n_keys, n_take));
+    for (int th = 0; th < N_THREADS; ++th){
+        int pos = 0;
+        for (int iterator = 0; iterator < N_THREADS; ++iterator){
+            for(int idx = 0; idx < cnt_size; idx++){
+                if (iterator < th){
+                    if(idx == 0){
+                        threadResult[pos] = 0;
+                        pos++;
+                    }
+                    else{
+                        threadResult[pos] = local[th].cnt[idx-1];
+                        pos++;
+                    }
+                }
+                else{
+                    threadResult[pos] = local[th].cnt[idx];
+                    pos++;
+                }
+            }
         }
-        sorted_index.at(global_histogram[tid].cnt[key] 
-            - n_placement[key] - 1) = idx.at(i-1);
-        ++n_placement[key];
+        if(th == 0){
+            for (int i = 0; i < N_THREADS*cnt_size; i++){
+                tempResult[i] = threadResult[i];
+                threadResult[i] = 0;
+            }
+            pos = 0;
+        }
+        else{
+            if (SIMD == 1){
+                simd_style_arr<n_keys, n_take>(threadResult, tempResult, threadB);
+            }
+            else{
+                old_style_arr<n_keys>(threadResult, tempResult, threadB);
+            }
+
+            for (int i = 0; i < N_THREADS*cnt_size; i++){
+                tempResult[i] = threadB[i];
+                threadResult[i] = 0;
+                threadB[i] = 0;
+            }
+            
+            pos = 0;
+        }
+    }
+    
+    for (int th = 0; th<N_THREADS; th++){
+        for (int key = 0; key<cnt_size; key++){
+            cnt[key] = tempResult[th*cnt_size+key];
+        }
+        // histogram[th].cnt.assign(cnt, cnt + cnt_size);
+        copy(cnt, cnt+cnt_size, histogram[th].cnt);
+    }
+}
+
+
+
+template <typename T>
+void suffix_placement_helper(uint64_t start, uint64_t end, int tid, T (&global_histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, vector<uint64_t> &sorted_index, int k, int n_keys, int n_take){
+    int test_n_keys = n_keys, test_n_take = n_take;
+    // uint64_t n_placement[(int)(pow(n_keys, n_take))];
+    // for(int i=0; i<cnt_size; i++) n_placement[i]=0;
+    vector<uint64_t> n_placement((int)(pow(test_n_keys, test_n_take)),0);
+    int cnt_size = (int)(pow(test_n_keys, test_n_take));
+    uint64_t idx_i = 0; uint64_t len = seq.size();
+    int counter_idx, seq_take = 0;
+
+    for(uint64_t i = end; i > start; i--){
+        idx_i = idx[i-1]+k;
+        if(idx_i<len){
+            counter_idx = 0; int power = test_n_take-1;
+            seq_take = seq[idx_i];   
+            counter_idx += seq_take*pow(test_n_keys,power);     
+            for (int j=1; j < test_n_take; j++){
+                power -= 1;
+                seq_take = seq[idx_i+j];
+                counter_idx += seq_take*pow(test_n_keys,power);
+            }
+        }
+        else{
+            counter_idx = DOLLAR;
+        }
+        sorted_index[global_histogram[tid].cnt[counter_idx]
+            - n_placement[counter_idx] - 1] = idx[i-1];
+        ++n_placement[counter_idx];        
     }
 
 }
 
-void suffix_placement(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread_cnt (&global_histogram)[N_THREADS], vector<uint64_t> &sorted_index){
+template <typename T, int n_keys, int n_take>
+void suffix_placement_helper_arr(uint64_t start, uint64_t end, int tid, T (&global_histogram)[N_THREADS], vector<int> &seq, vector<uint64_t> &idx, vector<uint64_t> &sorted_index, int k){
+    
+    uint64_t n_placement[(int)(pow(n_keys, n_take))];
+    int cnt_size = (int)(pow(n_keys, n_take));
+    for(int i=0; i<cnt_size; i++) n_placement[i]=0;
+    uint64_t idx_i = 0; uint64_t len = seq.size();
+    int counter_idx, seq_take = 0;
+
+    for(uint64_t i = end; i > start; i--){
+        idx_i = idx[i-1]+k;
+        if(idx_i<len){
+            counter_idx = 0; int power = n_take-1;
+            seq_take = seq[idx_i];   
+            counter_idx += seq_take*pow(n_keys,power);     
+            for (int j=1; j < n_take; j++){
+                power -= 1;
+                seq_take = seq[idx_i+j];
+                counter_idx += seq_take*pow(n_keys,power);
+            }
+        }
+        else{
+            counter_idx = DOLLAR;
+        }
+        sorted_index[global_histogram[tid].cnt[counter_idx]
+            - n_placement[counter_idx] - 1] = idx[i-1];
+        ++n_placement[counter_idx];        
+    }
+
+}
+
+
+template <typename T>
+void suffix_placement(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&global_histogram)[N_THREADS], vector<uint64_t> &sorted_index, int n_keys, int n_take){
     uint64_t len = idx.size();
     uint64_t n_elements = floor(len/N_THREADS);
     uint64_t n_remaining_elements = len%N_THREADS;
@@ -288,221 +432,119 @@ void suffix_placement(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, thread
         uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
         uint64_t end = start + n_elements;
         if(tid == 0) end += n_remaining_elements;
-        #pragma omp critical
-        // {if(k==1){cout<<"tid: "<< tid << ", start: " << start << ", end: " << end << endl;}}
-        suffix_placement_helper(start, end, tid, global_histogram, seq, idx, sorted_index, k);
+        suffix_placement_helper<T>(start, end, tid, global_histogram, seq, idx, sorted_index, k, n_keys, n_take);
     }
 }
 
-int * addition(uint64_t a[N_THREADS*N_KEYS]){
-    static int c[N_KEYS];
-    c[0] = 0;
-    c[1] = 0;
-    c[2] = 0;
-    c[3] = 0;
-    for (int th = 0; th < N_THREADS; th++){
-        uint32<N_KEYS> check1 = make_uint(c[0],c[1],c[2],c[3]);
-        uint32<N_KEYS> check2 = make_uint(a[N_KEYS*th+0],a[N_KEYS*th+1],a[N_KEYS*th+2],a[N_KEYS*th+3]);
-        uint32<N_KEYS> result = add(check1, check2);
-        store(c, result);
-    }
-    return c;
-}
-
-void using_thread(uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt local[N_THREADS], uint64_t tempResult[N_THREADS*N_KEYS], uint64_t threadB[N_THREADS*N_KEYS], thread_cnt (&histogram)[N_THREADS]){
-    
-    int Num_Threads =  thread::hardware_concurrency();
-    uint64_t cnt[N_KEYS];
-    ThreadPool pool(Num_Threads);
-    pool.init();
-    static int Result[N_THREADS*N_KEYS];
-    for (int horizontal = 0; horizontal < N_THREADS; horizontal++){
-        int pos = 0;
-        for (int vertical = 0; vertical < N_THREADS; vertical++){
-            for(int idx = 0; idx < N_KEYS; idx++){
-                if (horizontal < vertical){
-                    if(idx == 0){
-                        threadResult[pos] = 0;
-                        pos++;
-                    }
-                    else{
-                        threadResult[pos] = local[vertical].cnt[idx-1];
-                        pos++;
-                    }
-                }
-                else{
-                    threadResult[pos] = local[vertical].cnt[idx];
-                    pos++;
-                }
-            }
-        }
-        
-        future<int *> future = pool.submit(addition, threadResult);
-        
-        const int *result = future.get();
-        
-        for (int i = 0; i < N_KEYS; i++){
-            cnt[i] = *(result+i);
-        }
-        copy(cnt, cnt+N_KEYS, histogram[horizontal].cnt);
-    }
-
-    pool.shutdown();
-}
-
-void using_omp(uint64_t threadResult[N_THREADS*N_KEYS], thread_cnt local[N_THREADS], uint64_t tempResult[N_THREADS*N_KEYS], uint64_t threadB[N_THREADS*N_KEYS], thread_cnt (&histogram)[N_THREADS]){
-    
-    uint64_t cnt[N_KEYS];
-    #pragma omp parallel
-    for (int horizontal = 0; horizontal < N_THREADS; horizontal++){
-        int pos = 0;
-        //#pragma omp for nowait
-        for (int vertical = 0; vertical < N_THREADS; vertical++){
-            //#pragma omp critical
-            for(int idx = 0; idx < N_KEYS; idx++){
-                if (horizontal < vertical){
-                    if(idx == 0){
-                        threadResult[pos] = 0;
-                        pos++;
-                    }
-                    else{
-                        threadResult[pos] = local[vertical].cnt[idx-1];
-                        pos++;
-                    }
-                }
-                else{
-                    threadResult[pos] = local[vertical].cnt[idx];
-                    pos++;
-                }
-            }
-        }
-        
-        const int *result = addition(threadResult);
-        for (int i = 0; i < N_KEYS; i++){
-            cnt[i] = *(result+i);
-        }
-        copy(cnt, cnt+N_KEYS, histogram[horizontal].cnt);
+template <typename T, int n_keys, int n_take>
+void suffix_placement_arr(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T (&global_histogram)[N_THREADS], vector<uint64_t> &sorted_index){
+    uint64_t len = idx.size();
+    uint64_t n_elements = floor(len/N_THREADS);
+    uint64_t n_remaining_elements = len%N_THREADS;
+    #pragma omp parallel num_threads(N_THREADS)
+    {
+        int tid = omp_get_thread_num();
+        uint64_t start = tid * n_elements + min(tid,1) * n_remaining_elements;
+        uint64_t end = start + n_elements;
+        if(tid == 0) end += n_remaining_elements;
+        suffix_placement_helper_arr<T, n_keys, n_take>(start, end, tid, global_histogram, seq, idx, sorted_index, k);
     }
 }
 
 
-template<typename T>
-std::vector<uint64_t>
-radix_sort(vector<T> &seq, vector<uint64_t> &idx, uint64_t kmers){
-    //VARIABLE INTIALIZATION
+vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers, int n_keys, int n_take){
+//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
+    struct thread_cnt
+    {
+        // uint64_t cnt[(int)(pow(n_keys, n_take))];
+        vector <uint64_t> cnt;
+        // thread_cnt() : cnt((int)(pow(n_keys2, n_take2))) {}
+    };
     vector<int> local;
-    uint64_t tempResult[N_THREADS*N_KEYS];
-    uint64_t threadResult[N_THREADS*N_KEYS];
-    uint64_t threadB[N_THREADS*N_KEYS];
-    thread_cnt histogram_local[N_THREADS];
-    thread_cnt histogram_global[N_THREADS];
-    vector<uint64_t> sorted_index(seq.size(),0);
-    vector<uint64_t> idx_temp(seq.size(),0);
-    idx_temp.assign(idx.begin(), idx.end());
-    // cout << "Len seq: " << seq.size() << endl;
-    // cout << "Len idx: " << idx.size() << endl;
+    // uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    // uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    // uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))];
+    vector<uint64_t> tempResult(N_THREADS*(int)(pow(n_keys, n_take)),0);
+    vector<uint64_t> threadResult(N_THREADS*(int)(pow(n_keys, n_take)),0);
+    vector<uint64_t> threadB(N_THREADS*(int)(pow(n_keys, n_take)),0);
 
-    duration<double, milli> ms_double;
+    thread_cnt histogram_local[N_THREADS];
+    for(int i = 0; i<N_THREADS; i++){histogram_local[i].cnt.resize((int)(pow(n_keys, n_take)),0);}
+    thread_cnt histogram_global[N_THREADS];
+    for(int i = 0; i<N_THREADS; i++){histogram_global[i].cnt.resize((int)(pow(n_keys, n_take)),0);}
+
+    vector<uint64_t> sorted_index(seq.size(),0);
     auto t1 = high_resolution_clock::now();
     auto t2 = high_resolution_clock::now();
-    auto ta = high_resolution_clock::now();
-    auto tb = high_resolution_clock::now();
-    int k_idx = 0; int last = 0;
-    
-    for(int k=kmers-1; k>=0; k--){
-        t1 = high_resolution_clock::now();
-        ta = high_resolution_clock::now();
-        key_counting(seq, k, idx_temp, histogram_local);
-        tb = high_resolution_clock::now();
-        ms_double = tb - ta;
-        cout<< "Step 1: " << ms_double.count() << "ms" <<  endl;
-        local2global_hist(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
-        ta = high_resolution_clock::now();
-        ms_double = ta - tb;
-        cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;
-        suffix_placement(seq, k, idx_temp, histogram_global, sorted_index);
-        tb = high_resolution_clock::now();
-        ms_double = tb - ta;
-        cout<< "Step 3: " << ms_double.count() << "ms" <<  endl;
+    duration<double, milli> ms_double;
 
-        ta = high_resolution_clock::now();
-        if (k!=0){
-            idx_temp.swap(sorted_index);
-        }
-        tb = high_resolution_clock::now();
-        ms_double = tb - ta;
-        cout<< "Copy: " << ms_double.count() << "ms" <<  endl;
+    for(int k=kmers-n_take; k>=0;){
+        // t1 = high_resolution_clock::now();
+        // cout << "start" << endl;
+        key_counting<thread_cnt>(seq, k, idx, histogram_local,n_keys,n_take);
         // t2 = high_resolution_clock::now();
         // ms_double = t2 - t1;
-        // cout<< "All: " << ms_double.count() << "ms" <<  endl;
+        // cout<< "Step 1: " << ms_double.count() << "ms" <<  endl;
+        local2global_hist<thread_cnt>(0, threadResult, histogram_local, tempResult, threadB, histogram_global, n_keys, n_take);
+        // t1 = high_resolution_clock::now();
+        // ms_double = t1 - t2;
+        // cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;
+        suffix_placement<thread_cnt>(seq, k, idx, histogram_global, sorted_index, n_keys, n_take);
+        // print_sorted_idx(sorted_index, k);
+        // t2 = high_resolution_clock::now();
+        // ms_double = t2 - t1;
+        // cout<< "Step 3: " << ms_double.count() << "ms" <<  endl;
+        if (k!=0) {idx.swap(sorted_index);} else{break;} //else --> case: last n_take ends in 0 index
+        cout << "K = " << k << endl; //only for dev. purpose, comment this line for actual use
+        k -= n_take; //case: last n_take ends in negative index
+        if (k < 0){ 
+            k = 0;
+        }
     }
-    // for(int k=kmers-1; k>=0; k--){
-    //     ta = high_resolution_clock::now();
-    //     key_counting(seq, k, idx_temp, histogram_local);
-    //     tb = high_resolution_clock::now();
-    //     ms_double = tb - ta;
-    //     cout<< "Step 1: " << ms_double.count() << "ms" <<  endl;
-    //     random_shuffle(idx_temp.begin(), idx_temp.end());
-    // }
     return sorted_index;
 }
 
-// int main(int argc, const char * argv[]) {
-//     vector<int> seq = read_fasta_file("dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
-//     auto result = radix_sort(seq);
-//     print_sorted_idx(result,3);
-    /*
-    // STEP 1
-    auto t1 = high_resolution_clock::now();
-    key_counting(seq, k, idx, histogram_local);
-    auto t2 = high_resolution_clock::now();
-    duration<double, milli> ms_double = t2 - t1;
-    cout<< "STEP 1     | " << ms_double.count() << "ms          |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
-    cout << endl;
-
-    // STEP 2 & 3
-    // SIMD and BASIC ADDITION PER LINE
+template<int n_keys, int n_take>
+vector<uint64_t> radix_sort_arr(vector<int> &seq, vector<uint64_t> &idx, int kmers){
+//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa" 
+    struct thread_cnt
+    {
+        uint64_t cnt[(int)(pow(n_keys, n_take))];
+        // vector <uint64_t> cnt;
+        // thread_cnt() : cnt((int)(pow(n_keys, n_take))) {}
+    };
+    vector<int> local;
+    uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))];
+    uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))];
+    thread_cnt histogram_local[N_THREADS];
+    thread_cnt histogram_global[N_THREADS];
     vector<uint64_t> sorted_index(seq.size(),0);
-    for (int j = 0; j < 4; j++){
-        auto t1 = high_resolution_clock::now();
-        if (j<2){
-            //FROM LOCAL TO GLOBAL HISTOGRAM
-            local2global_hist(j, threadResult, histogram_local, tempResult, threadB, histogram_global);
-            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-            auto ts1 = high_resolution_clock::now();
-            suffix_placement(seq, k, idx, histogram_global, sorted_index);
-            auto ts2 = high_resolution_clock::now();
-            duration<double, milli> ms_double_s3 = ts2 - ts1;
-            cout<< "STEP 3     | " << ms_double_s3.count() << "ms          |" << " x256 : " << ms_double_s3.count()*256 << "ms " << endl;
+    auto t1 = high_resolution_clock::now();
+    auto t2 = high_resolution_clock::now();
+    duration<double, milli> ms_double;
 
+    for(int k=kmers-n_take; k>=0;){
+        t1 = high_resolution_clock::now();
+        cout << "start" << endl;
+        key_counting_arr<thread_cnt,n_keys,n_take>(seq, k, idx, histogram_local);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout<< "Step 1: " << ms_double.count() << "ms" <<  endl;
+        local2global_hist_arr<thread_cnt,n_keys,n_take>(1, threadResult, histogram_local, tempResult, threadB, histogram_global);
+        t1 = high_resolution_clock::now();
+        ms_double = t1 - t2;
+        cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;
+        suffix_placement_arr<thread_cnt,n_keys,n_take>(seq, k, idx, histogram_global, sorted_index);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout<< "Step 3: " << ms_double.count() << "ms" <<  endl;
+        if (k!=0) {idx.swap(sorted_index);} else{break;} //else --> case: last n_take ends in 0 index
+        cout << "K = " << k << endl;
+        k -= n_take; //case: last n_take ends in negative index
+        if (k < 0){ 
+            k = 0;
         }
-        else if(j==2){
-            //FROM LOCAL TO GLOBAL HISTOGRAM
-            using_thread(threadResult, histogram_local, tempResult, threadB, histogram_global);
-            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-            suffix_placement(seq, k, idx, histogram_global, sorted_index);
-        }
-        else{
-            //FROM LOCAL TO GLOBAL HISTOGRAM
-            using_omp(threadResult, histogram_local, tempResult, threadB, histogram_global);
-            //FROM GLOBAL HISTOGRAM TO SORTED INDEX
-            suffix_placement(seq, k, idx, histogram_global, sorted_index);
-        }
-        
-        auto t2 = high_resolution_clock::now();
-        duration<double, milli> ms_double = t2 - t1;
-        cout<< "STEP 2 + 3 | MODE: " << j << " " <<ms_double.count() << "ms |" << " x256 : " << ms_double.count()*256 << "ms " << endl;
-        cout << endl;
-    } */
-    
-    // PRINT THE GLOBAL HISTOGRAM
-//    cout << "GLOBAL HISTOGRAM: ";
-//    for(int i=0; i<N_THREADS; i++){
-//        for(int j=0; j<N_KEYS; j++){
-//            cout << histogram_global[i].cnt[j] << " ";
-//        }
-//    }
-//    cout << endl;
-    
-//     return 0;
-// }
+    }
+    return sorted_index;
+}

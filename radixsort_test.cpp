@@ -1,6 +1,5 @@
 #include <iostream>
-#include "radixsortv4.hpp"
-#include "radixsortv3.hpp"
+#include "radixsort.hpp"
 #include <cassert>
 #include <map>
 #include <set>
@@ -44,7 +43,7 @@ int main(int argc, char* argv[]) {
  	if(mode == "vector"){//using radixsortv4.hpp
  			result = radix_sort(seq, idx, kmers, n_keys, n_take); 
  	}else if(mode == "array"){//using radixsortv3.hpp
-     		result = radix_sort_vec<6,2>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
+     		result = radix_sort_arr<5,1>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
  	}else{
  		cout << "Mode is only \"vector\" or \"array\"!" << endl;
  		assert(mode == "vector" || mode == "array");

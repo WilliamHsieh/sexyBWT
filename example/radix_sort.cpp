@@ -17,13 +17,21 @@ int main() {
 		str += buf;
 	}
 
-    NoInitVector<uint32_t> par_idx(str.size() + 1);
-    iota(par_idx.begin(), par_idx.end(), 0);
+	NoInitVector<uint32_t> par_idx(str.size() + 1);
+	iota(par_idx.begin(), par_idx.end(), 0);
 
 	NoInitVector<char> S(str.size() + 1);
 	for (size_t i = 0; i < str.size(); i++)
 		S[i] = str[i];
 	S.back() = 0;
 
-	auto result = radix_sort::parallel::radix_sort(S, 127u, par_idx, 16u);
+	uint32_t kmer = 32;
+
+	auto result = radix_sort::parallel::radix_sort(S, 127u, par_idx, kmer);
+
+	/*
+	for (size_t i = 1; i < S.size(); i++) {
+		assert(str.substr(result[i - 1], kmer) <= str.substr(result[i], kmer));
+	}
+	*/
 }

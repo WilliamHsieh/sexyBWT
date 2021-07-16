@@ -1,7 +1,7 @@
 #define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
 
 #include <bits/stdc++.h>
-#include "psais/psais.hpp"
+#include "psais/psais_hybrid.hpp"
 
 using namespace std;
 
@@ -14,5 +14,5 @@ int main() {
 		str += buf;
 	}
 
-	auto result = psais::suffix_array<uint32_t>(str, 64);
+	auto result = psais::suffix_array_hybrid<uint32_t>(str, 64);
 }

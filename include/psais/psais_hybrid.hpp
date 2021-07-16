@@ -15,6 +15,8 @@
 #include "psais/utility/parallel.hpp"
 #include "psais/utility/thread_pool.hpp"
 
+#include "radix_sort/radix_sort.hpp"
+
 // #pSAIS::detail
 namespace psais::detail {
 
@@ -144,7 +146,7 @@ auto put_lms(
 
 	NoInitVector<IndexType> S1(n1);
 	std::transform(std::execution::par_unseq, SA1.begin(), SA1.end(), S1.begin(),
-		[&LMS](auto &x) { return LMS[x]; }
+		[&LMS](auto &x) { return x; }
 	);
 
 	NoInitVector<IndexType> local_BA(1ull * (K + 1) * NUM_THREADS);
@@ -537,7 +539,7 @@ auto get_lms(const TypeVector &T, const auto size) {
 
 // #suffix_array
 template<typename IndexType>
-NoInitVector<IndexType> suffix_array(
+NoInitVector<IndexType> suffix_array_hybrid(
 	const std::ranges::random_access_range auto &S,
 	IndexType K,
 	size_t kmer
@@ -546,36 +548,15 @@ NoInitVector<IndexType> suffix_array(
 	auto T = get_type<IndexType>(S);
 	auto BA = get_bucket(S, K);
 
-	// 2. induce LMS-substring
 	auto LMS = get_lms<IndexType>(T, S.size());
 
+	// 2. sort LMS suffix by radix_sort
+	auto SA1 = radix_sort::parallel::radix_sort(S, K, LMS, kmer);
+
+	// 3. induce orig SA
 	auto SA = NoInitVector<IndexType>(S.size());
 	psais::utility::parallel_init(SA, EMPTY<IndexType>);
 
-	auto SA1 = NoInitVector<IndexType>(LMS.size());
-
-	// iota SA1
-	auto iota = std::views::iota(IndexType(0), static_cast<IndexType>(SA1.size()));
-	std::transform(std::execution::par_unseq, iota.begin(), iota.end(), SA1.begin(),
-		[](auto &idx) { return idx; }
-	);
-
-	induce_sort(S, T, SA1, LMS, BA, SA);
-
-	auto S1 = std::ranges::subrange(SA.begin() + SA.size() - SA1.size(), SA.end());
-	auto K1 = name_substr(S, T, SA, S1, kmer);
-
-	// 3. recursively solve LMS-suffix
-	if (K1 + 1 == LMS.size()) {
-		for (size_t i = 0; i < LMS.size(); i++) {
-			SA1[S1[i]] = i;
-		}
-	} else {
-		SA1 = suffix_array(S1, K1, kmer >> 1);
-	}
-
-	// 4. induce orig SA
-	psais::utility::parallel_init(SA, EMPTY<IndexType>);
 	induce_sort(S, T, SA1, LMS, BA, SA);
 
 	return SA;
@@ -592,7 +573,7 @@ NoInitVector<IndexType> suffix_array(
 namespace psais {
 
 template <typename IndexType>
-auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
+auto suffix_array_hybrid(std::string_view s, size_t kmer = std::string::npos) {
 	IndexType K = 0;
 	auto idx = std::array<IndexType, 128>{};
 	for (auto c : s) idx[c] = 1;
@@ -604,7 +585,7 @@ auto suffix_array(std::string_view s, size_t kmer = std::string::npos) {
 	);
 	res[s.size()] = 0;
 
-	return psais::detail::suffix_array(res, K, kmer);
+	return psais::detail::suffix_array_hybrid(res, K, kmer);
 }
 
 } //namespace psais

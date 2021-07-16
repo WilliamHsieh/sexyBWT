@@ -9,7 +9,6 @@
 #include <cmath>
 #include <cstdlib>
 
-
 using namespace std;
 using chrono::high_resolution_clock;
 using chrono::duration_cast;
@@ -30,20 +29,19 @@ int main(int argc, char* argv[]) {
     auto tb = high_resolution_clock::now();
     duration<double, milli> ms_double;
 	
-	//hardcode test
     vector<int> seq = read_fasta_file(dataset); 
     int n_keys = set<int>(seq.begin(), seq.end()).size();
     // n_keys = 10000000; //uncomment this to test 10M n_keys. Using n_keys more than the actual one still can produce true sorting result. It's tested already & OK. 
     vector<uint64_t> idx = get_full_idx(seq);
- 	cout << "Seq len: " << seq.size() << endl; 
+ 	cout << "Seq. len: " << seq.size() << endl; 
     
  	//call the API
  	ta = high_resolution_clock::now();
  	vector<uint64_t> result;
- 	if(mode == "vector"){//using radixsortv4.hpp
+ 	if(mode == "vector"){
  			result = radix_sort(seq, idx, kmers, n_keys, n_take); 
- 	}else if(mode == "array"){//using radixsortv3.hpp
-     		result = radix_sort_arr<5,1>(seq, idx, kmers); //template <x,y> --> x: number of unique keys in seq; y: how many digits to sort in each radixsort iteration
+ 	}else if(mode == "array"){
+     		result = radix_sort_arr<5,1>(seq, idx, kmers); //template <n_keys,n_take> --> n_keys: number of unique keys in seq; n_take: how many digits to sort in each radixsort iteration
  	}else{
  		cout << "Mode is only \"vector\" or \"array\"!" << endl;
  		assert(mode == "vector" || mode == "array");
@@ -51,9 +49,9 @@ int main(int argc, char* argv[]) {
 
     tb = high_resolution_clock::now();
 	ms_double = tb - ta;
-	cout<< "All: " << ms_double.count() << "ms" <<  endl;
+	cout<< "All exec. time: " << ms_double.count() << "ms" <<  endl;
  	
-
+	//hardcode test
 	if(dataset.find("20.fa") != string::npos){
 	 	//assert
 	 	print_sorted_idx(result, kmers);

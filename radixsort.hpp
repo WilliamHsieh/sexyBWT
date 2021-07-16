@@ -24,19 +24,16 @@ using chrono::duration;
 using chrono::milliseconds;
 
 vector<int> read_fasta_file(string path) {
-    //A, C, G, T, $ as 1, 2, 3, 4, 0
-    //bool exist =  IsPathExist(path);
-    //cout << "EXIST? --> " << exist << endl;
+    // simplified function to read sequnce of A, C, G, T, $ as 1, 2, 3, 4, 0.
+    // simplified: all data sequences other than those chars will be converted to 1,
+    // since the real encoded sequence is already provided by pSAIS as radixsort input.
     string line;
     ifstream infile(path);
     vector<int> sequence;
-    //cout << "Path: " << path << endl;
     int line_idx = 1;
     while (getline(infile, line)) {
-        //cout << "line idx: " << line_idx << endl;
         line_idx++;
         char first_char = line[0];
-        //cout << "first char: " << first_char << endl;
         if (first_char == '>') {
             continue;
         }
@@ -53,9 +50,8 @@ vector<int> read_fasta_file(string path) {
             } else if (tolower(c) == 't')
             {
                 temp = 4;
-            } else {
+            } else { //simplified: all data sequences other than A,C,G,T will be converted to 1
                 temp = 1;
-                // cout << "Char fasta file invalid: " << c << endl;
             }
             sequence.push_back(temp);
         }
@@ -386,7 +382,6 @@ void suffix_placement_helper(uint64_t start, uint64_t end, int tid, T (&global_h
             - n_placement[counter_idx] - 1] = idx[i-1];
         ++n_placement[counter_idx];        
     }
-
 }
 
 template <typename T, int n_keys, int n_take>
@@ -417,7 +412,6 @@ void suffix_placement_helper_arr(uint64_t start, uint64_t end, int tid, T (&glob
             - n_placement[counter_idx] - 1] = idx[i-1];
         ++n_placement[counter_idx];        
     }
-
 }
 
 
@@ -453,17 +447,11 @@ void suffix_placement_arr(vector<int> &seq, uint8_t k, vector<uint64_t> &idx, T 
 
 
 vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers, int n_keys, int n_take){
-//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa"
     struct thread_cnt
     {
-        // uint64_t cnt[(int)(pow(n_keys, n_take))];
         vector <uint64_t> cnt;
-        // thread_cnt() : cnt((int)(pow(n_keys2, n_take2))) {}
     };
     vector<int> local;
-    // uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];
-    // uint64_t threadResult[N_THREADS*(int)(pow(n_keys, n_take))];
-    // uint64_t threadB[N_THREADS*(int)(pow(n_keys, n_take))];
     vector<uint64_t> tempResult(N_THREADS*(int)(pow(n_keys, n_take)),0);
     vector<uint64_t> threadResult(N_THREADS*(int)(pow(n_keys, n_take)),0);
     vector<uint64_t> threadB(N_THREADS*(int)(pow(n_keys, n_take)),0);
@@ -490,7 +478,6 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers, 
         // ms_double = t1 - t2;
         // cout<< "Step 2: " << ms_double.count() << "ms" <<  endl;
         suffix_placement<thread_cnt>(seq, k, idx, histogram_global, sorted_index, n_keys, n_take);
-        // print_sorted_idx(sorted_index, k);
         // t2 = high_resolution_clock::now();
         // ms_double = t2 - t1;
         // cout<< "Step 3: " << ms_double.count() << "ms" <<  endl;
@@ -506,12 +493,9 @@ vector<uint64_t> radix_sort(vector<int> &seq, vector<uint64_t> &idx, int kmers, 
 
 template<int n_keys, int n_take>
 vector<uint64_t> radix_sort_arr(vector<int> &seq, vector<uint64_t> &idx, int kmers){
-//    vector<int> seq = read_fasta_file("/Users/jehoshuapratama/Downloads/ParallelPrograming/sexyBWT/dataset/20.fa"); //"drosophila.fa" "parallel_radix_sort/20.fa" 
     struct thread_cnt
     {
         uint64_t cnt[(int)(pow(n_keys, n_take))];
-        // vector <uint64_t> cnt;
-        // thread_cnt() : cnt((int)(pow(n_keys, n_take))) {}
     };
     vector<int> local;
     uint64_t tempResult[N_THREADS*(int)(pow(n_keys, n_take))];

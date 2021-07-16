@@ -42,9 +42,7 @@ void parallel_do (
 // #parallel_init
 template <std::ranges::input_range R>
 void parallel_init(R&& r, const auto& value) {
-	std::for_each(std::execution::par, r.begin(), r.end(),
-		[&value](auto &x) { x = value; }
-	);
+	std::fill(std::execution::par_unseq, r.begin(), r.end(), value);
 }
 
 // #parallel_prefix_sum

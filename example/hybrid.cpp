@@ -1,7 +1,7 @@
 #define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
 
 #include <bits/stdc++.h>
-#include "psais/psais_hybrid.hpp"
+#include "psais/hybrid.hpp"
 
 using namespace std;
 

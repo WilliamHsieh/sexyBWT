@@ -61,7 +61,7 @@ NoInitVector<IndexType> radix_sort(
 
 namespace radix_sort::parallel {
 
-#define NUM_THREADS 32
+#define NUM_THREADS 32u
 
 template<typename IndexType>
 auto get_bucket(auto &S, IndexType K) {
@@ -106,14 +106,14 @@ void radix_sort_key(
 
 	NoInitVector<IndexType> data(idx.size());
 	psais::utility::parallel_do(idx.size(), NUM_THREADS,
-	[&](auto L, auto R, auto) {
-		for (auto i = L; i < R; i++) {
-			auto x = idx[i] + offset;
-		if (x >= (IndexType)S.size())
-			data[i] = 0;
-		else
-			data[i] = S[x];
-		}
+		[&](auto L, auto R, auto) {
+			for (auto i = L; i < R; i++) {
+				auto x = idx[i] + offset;
+			if (x >= (IndexType)S.size())
+				data[i] = 0;
+			else
+				data[i] = S[x];
+			}
 		}
 	);
 
@@ -147,7 +147,7 @@ void radix_sort_key(
 	psais::utility::parallel_do(K + 1, NUM_THREADS,
 		[&](IndexType L, IndexType R, IndexType) {
 			for (IndexType i = NUM_THREADS - 2; ~i; i--) {
-				auto *w_ptr = local_BA.data() + (i		) * (K + 1);
+				auto *w_ptr = local_BA.data() + (i    ) * (K + 1);
 				auto *r_ptr = local_BA.data() + (i + 1) * (K + 1);
 				for (IndexType j = L; j < R; j++)
 					w_ptr[j] += r_ptr[j];

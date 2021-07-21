@@ -2,6 +2,7 @@
 * `boost` is required
 * Intel `tbb` is required
 * google test is required for testing
+* compiler with `C++20` support
 
 ## Hybrid
 * [README.md](https://github.com/WilliamHsieh/sexyBWT/tree/hybrid)

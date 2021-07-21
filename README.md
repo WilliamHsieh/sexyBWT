@@ -21,10 +21,10 @@ make hybrid
 ```
 
 ## pSAIS
-* [README.md](https://github.com/WilliamHsieh/sexyBWT/blob/psais/README.md)
+* [README.md](https://github.com/WilliamHsieh/sexyBWT/tree/psais)
 
 ## radix_sort
-* [README.md](https://github.com/WilliamHsieh/sexyBWT/blob/radix_sort/README.md)
+* [README.md](https://github.com/WilliamHsieh/sexyBWT/tree/radix_sort)
 
 ## reference
 * [slide](https://docs.google.com/presentation/d/1_wfaj8DifSW6FZVzTrDeEVucdw74WgY7prA6zdyCS1o/edit#slide=id.ge4f602b3f0_0_213)
